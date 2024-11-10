@@ -7,10 +7,20 @@ import { FontAwesome } from '@expo/vector-icons';
 import { bibleBooks } from '../constants/bible-books';
 import Colors from '../constants/Colors';
 import { useColorScheme } from 'react-native';
+import { bibleService } from '../services/bibleService';
+
+interface VerseComment {
+  text: string;
+  comment?: string;
+}
 
 interface ChapterContent {
   chapter: number;
-  verses: any[];
+  verses: {
+    verse: number;
+    text: string;
+    comment?: string;
+  }[];
 }
 
 export default function BibleScreen() {
@@ -70,18 +80,35 @@ export default function BibleScreen() {
   const loadChapters = useCallback(async (book: string, startChapter: number) => {
     setIsLoading(true);
     try {
-      // Load current chapter and next four chapters (2 before, current, 2 after)
-      const chapterPromises = [-2, -1, 0, 1, 2].map(offset => 
-        fetchVerseContent(`${book} ${startChapter + offset}`)
-      );
+      console.log(`Loading chapters for ${book}, starting at chapter ${startChapter}`);
+      
+      // Only load valid chapters (1 and above)
+      const chapterPromises = [];
+      for (let offset = -2; offset <= 2; offset++) {
+        const targetChapter = startChapter + offset;
+        if (targetChapter > 0) { // Only fetch valid chapters
+          console.log(`Fetching chapter ${targetChapter}`);
+          chapterPromises.push(fetchVerseContent(`${book} ${targetChapter}`));
+        }
+      }
       
       const results = await Promise.all(chapterPromises);
+      console.log('Received results:', results.map(r => ({
+        chapter: r?.chapter,
+        verseCount: r?.verses?.length
+      })));
+
       const validResults = results
         .filter(result => result?.verses)
-        .map((result, index) => ({
-          chapter: startChapter + (index - 2), // Adjust for the offset
+        .map(result => ({
+          chapter: result.chapter,
           verses: result.verses
         }));
+
+      console.log('Valid results:', validResults.map(r => ({
+        chapter: r.chapter,
+        verseCount: r.verses.length
+      })));
 
       setChapters(prev => {
         // Remove duplicates and sort chapters
@@ -94,13 +121,19 @@ export default function BibleScreen() {
           return acc;
         }, [] as ChapterContent[]);
 
-        return uniqueChapters.sort((a, b) => a.chapter - b.chapter);
+        const sortedChapters = uniqueChapters.sort((a, b) => a.chapter - b.chapter);
+        console.log('Final chapters state:', sortedChapters.map(c => ({
+          chapter: c.chapter,
+          verseCount: c.verses.length
+        })));
+
+        return sortedChapters;
       });
     } catch (error) {
       console.error('Error loading chapters:', error);
     }
     setIsLoading(false);
-  }, []);
+  }, [fetchVerseContent]);
 
   useEffect(() => {
     loadChapters(currentBook, currentChapter);
@@ -161,6 +194,23 @@ export default function BibleScreen() {
         ? prev.filter(id => id !== verseId)
         : [...prev, verseId]
     );
+  };
+
+  const parseVerseText = (verseText: string): VerseComment => {
+    const commentRegex = /\{([^}]+)\}/g;
+    const comments: string[] = [];
+    let cleanText = verseText;
+    
+    let match;
+    while ((match = commentRegex.exec(verseText)) !== null) {
+      comments.push(match[1]);
+      cleanText = cleanText.replace(match[0], '');
+    }
+
+    return {
+      text: cleanText.trim(),
+      comment: comments.length > 0 ? comments.join(' ') : undefined
+    };
   };
 
   const renderModalContent = () => {
@@ -254,7 +304,7 @@ export default function BibleScreen() {
           }}
         >
           <Text style={dynamicStyles.headerText}>
-            {currentBook} {currentChapter}
+            {bibleService.bibleData?.find(b => b.abbrev === currentBook)?.name || currentBook} {currentChapter}
           </Text>
           <FontAwesome name="chevron-down" size={16} color={theme.text} />
         </Pressable>
@@ -278,29 +328,45 @@ export default function BibleScreen() {
               Chapter {chapter.chapter}
             </Text>
             <View style={styles.versesContainer}>
-              {chapter.verses.map((verse) => (
-                <Pressable
-                  key={`${chapter.chapter}-${verse.verse}`}
-                  onPress={() => handleVersePress(verse.verse)}
-                  style={styles.verseContainer}
-                >
-                  <Text variant="verseNumber" style={{ color: theme.verseNumber }}>
-                    {verse.verse}
-                  </Text>
-                  <Text 
-                    variant="verse"
-                    style={[
-                      styles.verseText,
-                      { color: theme.text },
-                      selectedVerses.includes(verse.verse) && {
-                        backgroundColor: theme.verseHighlight
-                      }
-                    ]}
+              {chapter.verses.map((verse) => {
+                const parsedVerse = parseVerseText(verse.text);
+                return (
+                  <Pressable
+                    key={`${chapter.chapter}-${verse.verse}`}
+                    onPress={() => handleVersePress(verse.verse)}
+                    style={styles.verseContainer}
                   >
-                    {verse.text}
-                  </Text>
-                </Pressable>
-              ))}
+                    <Text variant="verseNumber" style={{ color: theme.verseNumber }}>
+                      {verse.verse}
+                    </Text>
+                    <View style={styles.verseTextContainer}>
+                      <Text 
+                        variant="verse"
+                        style={[
+                          styles.verseText,
+                          { color: theme.text },
+                          selectedVerses.includes(verse.verse) && {
+                            backgroundColor: theme.verseHighlight
+                          }
+                        ]}
+                      >
+                        {parsedVerse.text}
+                      </Text>
+                      {parsedVerse.comment && (
+                        <Text 
+                          variant="verseComment"
+                          style={[
+                            styles.verseComment,
+                            { color: theme.primary }
+                          ]}
+                        >
+                          {parsedVerse.comment}
+                        </Text>
+                      )}
+                    </View>
+                  </Pressable>
+                );
+              })}
             </View>
           </View>
         ))}
@@ -539,5 +605,19 @@ const styles = StyleSheet.create({
   loadingContainer: {
     padding: 20,
     alignItems: 'center',
+  },
+  verseTextContainer: {
+    flex: 1,
+    paddingLeft: 8,
+  },
+  verseText: {
+    fontSize: 20,
+    lineHeight: 32,
+  },
+  verseComment: {
+    fontSize: 16,
+    fontStyle: 'italic',
+    marginTop: 4,
+    marginBottom: 8,
   },
 });

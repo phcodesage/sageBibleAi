@@ -51,6 +51,9 @@
       {
         "asset": "./assets/fonts/Crimson-Italic.ttf"
       }
+    ],
+    "assets": [
+      "./bible/json/**/*"
     ]
   }
 }

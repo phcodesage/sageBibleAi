@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState } from 'react';
-import { bibleBooks } from '../constants/bible-books';
+import React, { createContext, useContext, useState, useCallback } from 'react';
+import { bibleService } from '../services/bibleService';
 
 interface BibleContextType {
   currentBook: string;
@@ -12,33 +12,42 @@ interface BibleContextType {
 const BibleContext = createContext<BibleContextType | undefined>(undefined);
 
 export function BibleProvider({ children }: { children: React.ReactNode }) {
-  const [currentBook, setCurrentBook] = useState('Genesis');
+  const [currentBook, setCurrentBook] = useState('gn');
   const [currentChapter, setCurrentChapter] = useState(1);
 
-  async function fetchVerseContent(reference: string) {
+  const fetchVerseContent = useCallback(async (reference: string) => {
+    console.log('Fetching verse content for reference:', reference);
+    
     try {
-      const response = await fetch(`https://bible-api.com/${reference}?translation=web`);
-      const data = await response.json();
-      return {
-        verses: data.verses,
-        reference: data.reference,
-      };
+      // Parse reference (e.g., "Genesis 1" or "John 3")
+      const [book, chapter] = reference.split(' ');
+      const bookAbbrev = bibleService.getBookAbbrev(book);
+      
+      console.log('Parsed reference - Book:', bookAbbrev, 'Chapter:', chapter);
+
+      if (parseInt(chapter) <= 0) {
+        console.log('Invalid chapter number:', chapter);
+        return null;
+      }
+
+      const chapterData = await bibleService.getChapter(bookAbbrev, parseInt(chapter));
+      return chapterData;
     } catch (error) {
-      console.error('Error fetching verse:', error);
+      console.error('Error fetching verse content:', error);
       return null;
     }
-  }
-
-  const value = {
-    currentBook,
-    currentChapter,
-    setCurrentBook,
-    setCurrentChapter,
-    fetchVerseContent,
-  };
+  }, []);
 
   return (
-    <BibleContext.Provider value={value}>
+    <BibleContext.Provider
+      value={{
+        currentBook,
+        currentChapter,
+        setCurrentBook,
+        setCurrentChapter,
+        fetchVerseContent,
+      }}
+    >
       {children}
     </BibleContext.Provider>
   );
