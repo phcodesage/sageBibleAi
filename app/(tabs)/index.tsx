@@ -1,4 +1,4 @@
-import { StyleSheet, ScrollView, Pressable, View, Modal, FlatList, TextInput } from 'react-native';
+import { StyleSheet, ScrollView, Pressable, View, Modal, FlatList, TextInput, ActivityIndicator } from 'react-native';
 import { Text } from '../components/Text';
 import { Screen } from '../components/Screen';
 import { useBible } from '../context/BibleContext';
@@ -23,6 +23,33 @@ interface ChapterContent {
   }[];
 }
 
+interface SearchResult {
+  book: string;
+  bookName: string;
+  chapter: number;
+  verse: number;
+  text: string;
+  matchIndex: number;
+  keyword: string;
+}
+
+const BIBLE_STRUCTURE = {
+  oldTestament: {
+    law: ['Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy'],
+    history: ['Joshua', 'Judges', 'Ruth', '1 Samuel', '2 Samuel', '1 Kings', '2 Kings', '1 Chronicles', '2 Chronicles', 'Ezra', 'Nehemiah', 'Esther'],
+    poetry: ['Job', 'Psalms', 'Proverbs', 'Ecclesiastes', 'Song of Solomon'],
+    majorProphets: ['Isaiah', 'Jeremiah', 'Lamentations', 'Ezekiel', 'Daniel'],
+    minorProphets: ['Hosea', 'Joel', 'Amos', 'Obadiah', 'Jonah', 'Micah', 'Nahum', 'Habakkuk', 'Zephaniah', 'Haggai', 'Zechariah', 'Malachi']
+  },
+  newTestament: {
+    gospels: ['Matthew', 'Mark', 'Luke', 'John'],
+    history: ['Acts'],
+    paulineEpistles: ['Romans', '1 Corinthians', '2 Corinthians', 'Galatians', 'Ephesians', 'Philippians', 'Colossians', '1 Thessalonians', '2 Thessalonians', '1 Timothy', '2 Timothy', 'Titus', 'Philemon'],
+    generalEpistles: ['Hebrews', 'James', '1 Peter', '2 Peter', '1 John', '2 John', '3 John', 'Jude'],
+    apocalyptic: ['Revelation']
+  }
+};
+
 export default function BibleScreen() {
   const { currentBook, currentChapter, setCurrentBook, setCurrentChapter, fetchVerseContent } = useBible();
   const [chapters, setChapters] = useState<ChapterContent[]>([]);
@@ -31,11 +58,18 @@ export default function BibleScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searchStats, setSearchStats] = useState<{
+    total: number;
+    bookOccurrences: { [key: string]: number };
+    relatedWords: string[];
+  }>({ total: 0, bookOccurrences: {}, relatedWords: [] });
   const [showSearch, setShowSearch] = useState(false);
   const [selectedVerses, setSelectedVerses] = useState<number[]>([]);
   const colorScheme = useColorScheme();
   const theme = Colors[colorScheme ?? 'light'];
+  const [selectedTestament, setSelectedTestament] = useState<'old' | 'new' | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Move styles that depend on theme inside the component
   const dynamicStyles = StyleSheet.create({
@@ -173,20 +207,83 @@ export default function BibleScreen() {
     scrollViewRef.current?.scrollTo({ y: 0, animated: true });
   };
 
-  const handleSearch = (text: string) => {
-    setSearchQuery(text);
-    if (text.length >= 2) {
-      // Search within current chapter
-      const results = chapters.flatMap(chapter => 
-        chapter.verses.filter(verse => 
-          verse.text.toLowerCase().includes(text.toLowerCase())
-        )
-      );
-      setSearchResults(results);
-    } else {
-      setSearchResults([]);
+  // Add this function to handle verse navigation
+  const navigateToVerse = useCallback(async (book: string, chapter: number, verse: number) => {
+    console.log(`Navigating to ${book} ${chapter}:${verse}`);
+    
+    try {
+      setIsLoading(true);
+      setCurrentBook(book);
+      setCurrentChapter(chapter);
+      setSelectedVerses([verse]);
+      setShowSearch(false);
+
+      // Load the chapter content
+      const chapterData = await fetchVerseContent(`${book} ${chapter}`);
+      if (chapterData) {
+        setChapters([{
+          chapter: chapter,
+          verses: chapterData.verses
+        }]);
+
+        // Scroll to top after setting the chapter
+        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      }
+    } catch (error) {
+      console.error('Navigation error:', error);
+    } finally {
+      setIsLoading(false);
     }
-  };
+  }, [fetchVerseContent]);
+
+  // Update the search handler to use debouncing
+  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
+
+  const handleSearch = useCallback((text: string) => {
+    setSearchQuery(text);
+    
+    // Clear previous timeout
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+
+    if (text.length >= 2) {
+      setIsSearching(true);
+    }
+
+    // Set new timeout for search
+    const newTimeout = setTimeout(async () => {
+      if (text.length >= 2) {
+        try {
+          const results = await bibleService.searchText(text);
+          setSearchResults(results);
+          
+          // Update search stats
+          const bookOccurrences: { [key: string]: number } = {};
+          results.forEach(result => {
+            const bookName = bibleService.bibleData.find(b => b.abbrev === result.book)?.name || result.book;
+            bookOccurrences[bookName] = (bookOccurrences[bookName] || 0) + 1;
+          });
+
+          setSearchStats({
+            total: results.length,
+            bookOccurrences,
+            relatedWords: await bibleService.findRelatedWords(text)
+          });
+        } catch (error) {
+          console.error('Search error:', error);
+        } finally {
+          setIsSearching(false);
+        }
+      } else {
+        setSearchResults([]);
+        setSearchStats({ total: 0, bookOccurrences: {}, relatedWords: [] });
+        setIsSearching(false);
+      }
+    }, 300);
+
+    setSearchTimeout(newTimeout);
+  }, []);
 
   const handleVersePress = (verseId: number) => {
     setSelectedVerses(prev => 
@@ -316,6 +413,175 @@ export default function BibleScreen() {
   // Add new state for book dropdown
   const [showBookDropdown, setShowBookDropdown] = useState(false);
 
+  const renderBookDropdown = () => (
+    <View style={[styles.bookDropdown, { backgroundColor: theme.background }]}>
+      <ScrollView style={styles.bookList}>
+        {!selectedTestament ? (
+          // Show Testament Selection
+          <>
+            <Pressable
+              style={styles.testamentItem}
+              onPress={() => setSelectedTestament('old')}
+            >
+              <Text style={[styles.testamentHeader, { color: theme.primary }]}>
+                Old Testament
+              </Text>
+              <Text style={[styles.testamentSubtext, { color: theme.text }]}>
+                Genesis to Malachi
+              </Text>
+            </Pressable>
+            
+            <Pressable
+              style={styles.testamentItem}
+              onPress={() => setSelectedTestament('new')}
+            >
+              <Text style={[styles.testamentHeader, { color: theme.primary }]}>
+                New Testament
+              </Text>
+              <Text style={[styles.testamentSubtext, { color: theme.text }]}>
+                Matthew to Revelation
+              </Text>
+            </Pressable>
+          </>
+        ) : (
+          // Show Books of Selected Testament
+          <>
+            <View style={styles.dropdownHeader}>
+              <Pressable 
+                style={styles.backButton}
+                onPress={() => setSelectedTestament(null)}
+              >
+                <FontAwesome name="arrow-left" size={20} color={theme.text} />
+              </Pressable>
+              <Text style={[styles.testamentHeader, { color: theme.primary }]}>
+                {selectedTestament === 'old' ? 'Old Testament' : 'New Testament'}
+              </Text>
+            </View>
+            
+            {Object.entries(
+              selectedTestament === 'old' 
+                ? BIBLE_STRUCTURE.oldTestament 
+                : BIBLE_STRUCTURE.newTestament
+            ).map(([category, books]) => (
+              <View key={category}>
+                <Text style={[styles.categoryHeader, { color: theme.text }]}>
+                  {category.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+                </Text>
+                {books.map(bookName => {
+                  const book = bibleService.bibleData.find(b => b.name === bookName);
+                  if (!book) return null;
+                  return (
+                    <Pressable
+                      key={book.abbrev}
+                      style={[
+                        styles.bookDropdownItem,
+                        currentBook === book.abbrev && styles.selectedBookDropdownItem
+                      ]}
+                      onPress={() => {
+                        setCurrentBook(book.abbrev);
+                        setCurrentChapter(1);
+                        setChapters([]);
+                        setShowBookDropdown(false);
+                        setSelectedTestament(null);
+                      }}
+                    >
+                      <Text style={[styles.bookDropdownText, { color: theme.text }]}>
+                        {book.name}
+                      </Text>
+                      <Text style={[styles.bookAbbrev, { color: theme.primary }]}>
+                        {book.abbrev}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ))}
+          </>
+        )}
+      </ScrollView>
+    </View>
+  );
+
+  const renderSearchStats = () => (
+    <View style={styles.searchStats}>
+      <Text style={[styles.searchStatsText, { color: theme.text }]}>
+        Found {searchStats.total} occurrences
+      </Text>
+      
+      {/* Related Words */}
+      {searchStats.relatedWords.length > 0 && (
+        <View style={styles.relatedWordsContainer}>
+          <Text style={[styles.relatedWordsTitle, { color: theme.primary }]}>
+            Related Words:
+          </Text>
+          <View style={styles.relatedWordsList}>
+            {searchStats.relatedWords.map((word, index) => (
+              <Pressable
+                key={word}
+                style={styles.relatedWordChip}
+                onPress={() => {
+                  setSearchQuery(word);
+                  handleSearch(word);
+                }}
+              >
+                <Text style={[styles.relatedWordText, { color: theme.primary }]}>
+                  {word}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Book Statistics */}
+      <View style={styles.bookStats}>
+        <Text style={[styles.bookStatsTitle, { color: theme.text }]}>
+          Occurrences by Book:
+        </Text>
+        {Object.entries(searchStats.bookOccurrences)
+          .sort(([, a], [, b]) => b - a)
+          .map(([book, count]) => (
+            <View key={book} style={styles.bookStatRow}>
+              <Text style={[styles.bookStatText, { color: theme.text }]}>
+                {book}
+              </Text>
+              <Text style={[styles.bookStatCount, { color: theme.primary }]}>
+                {count}
+              </Text>
+            </View>
+          ))}
+      </View>
+    </View>
+  );
+
+  // Add this helper function to highlight search terms
+  const highlightSearchTerm = (text: string, searchTerm: string) => {
+    if (!searchTerm) return text;
+    
+    const parts = text.split(new RegExp(`(${searchTerm})`, 'gi'));
+    return (
+      <Text style={[styles.searchResultText, { color: theme.text }]}>
+        {parts.map((part, index) => 
+          part.toLowerCase() === searchTerm.toLowerCase() ? (
+            <Pressable
+              key={index}
+              onPress={() => {
+                setSearchQuery(part);
+                handleSearch(part);
+              }}
+            >
+              <Text style={[styles.highlightedTerm, { backgroundColor: theme.primary + '30' }]}>
+                {part}
+              </Text>
+            </Pressable>
+          ) : (
+            <Text key={index}>{part}</Text>
+          )
+        )}
+      </Text>
+    );
+  };
+
   return (
     <Screen>
       <View style={[styles.header, { backgroundColor: theme.background }]}>
@@ -349,52 +615,26 @@ export default function BibleScreen() {
 
         <Pressable 
           style={styles.searchButton}
-          onPress={() => setShowSearch(true)}
+          onPress={() => {
+            setShowSearch(true);
+            setSearchQuery('');  // Clear previous search
+            setSearchResults([]);
+            setSearchStats({ total: 0, bookOccurrences: {}, relatedWords: [] });
+          }}
         >
-          <FontAwesome name="search" size={20} color={theme.text} />
+          <View style={styles.searchButtonContainer}>
+            <FontAwesome name="search" size={20} color={theme.text} />
+            <View style={styles.searchTooltip}>
+              <Text style={styles.searchTooltipText}>
+                Search for words, phrases, or references
+              </Text>
+            </View>
+          </View>
         </Pressable>
       </View>
 
       {/* Book Dropdown */}
-      {showBookDropdown && (
-        <View style={[styles.bookDropdown, { backgroundColor: theme.background }]}>
-          <ScrollView style={styles.bookList}>
-            {bibleService.bibleData.map((book) => (
-              <Pressable
-                key={book.abbrev}
-                style={[
-                  styles.bookDropdownItem,
-                  currentBook === book.abbrev && styles.selectedBookDropdownItem
-                ]}
-                onPress={() => {
-                  setCurrentBook(book.abbrev);
-                  setCurrentChapter(1);
-                  setChapters([]);
-                  setShowBookDropdown(false);
-                }}
-              >
-                <Text 
-                  style={[
-                    styles.bookDropdownText,
-                    { color: theme.text },
-                    currentBook === book.abbrev && styles.selectedBookDropdownText
-                  ]}
-                >
-                  {book.name}
-                </Text>
-                <Text 
-                  style={[
-                    styles.bookAbbrev,
-                    { color: theme.primary }
-                  ]}
-                >
-                  {book.abbrev}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
-      )}
+      {showBookDropdown && renderBookDropdown()}
 
       <ScrollView 
         ref={scrollViewRef}
@@ -413,8 +653,12 @@ export default function BibleScreen() {
                 return (
                   <Pressable
                     key={`${chapter.chapter}-${verse.verse}`}
+                    id={`verse-${chapter.chapter}-${verse.verse}`}
                     onPress={() => handleVersePress(verse.verse)}
-                    style={styles.verseContainer}
+                    style={[
+                      styles.verseContainer,
+                      selectedVerses.includes(verse.verse) && styles.selectedVerseContainer
+                    ]}
                   >
                     <Text variant="verseNumber" style={{ color: theme.verseNumber }}>
                       {verse.verse}
@@ -465,34 +709,48 @@ export default function BibleScreen() {
               style={styles.searchInput}
               value={searchQuery}
               onChangeText={handleSearch}
-              placeholder="Search in current chapter..."
+              placeholder="Search the Bible..."
               autoFocus
             />
             <Pressable onPress={() => setShowSearch(false)}>
               <FontAwesome name="times" size={24} color={Colors.primary} />
             </Pressable>
           </View>
-          {searchResults.length > 0 && (
-            <Text style={styles.resultCount}>
-              Found {searchResults.length} matches
-            </Text>
-          )}
-          <ScrollView style={styles.searchResults}>
-            {searchResults.map((verse, index) => (
-              <Pressable
-                key={index}
-                style={styles.searchResult}
-                onPress={() => {
-                  setSelectedVerses([verse.verse]);
-                  setShowSearch(false);
-                  // Scroll to verse
-                }}
-              >
-                <Text style={dynamicStyles.searchResultVerse}>
-                  Verse {verse.verse}
+
+          {searchQuery.length >= 2 && (
+            <View style={styles.searchStats}>
+              {isSearching ? (
+                <View style={styles.searchingContainer}>
+                  <ActivityIndicator color={Colors.primary} />
+                  <Text style={[styles.searchingText, { color: theme.text }]}>
+                    Searching...
+                  </Text>
+                </View>
+              ) : (
+                <Text style={[styles.searchStatsText, { color: theme.text }]}>
+                  Found {searchStats.total} occurrences
                 </Text>
-                <Text style={dynamicStyles.searchResultText}>
-                  {verse.text}
+              )}
+            </View>
+          )}
+
+          <ScrollView style={styles.searchResults}>
+            {!isSearching && searchResults.map((result, index) => (
+              <Pressable
+                key={`${result.book}-${result.chapter}-${result.verse}-${index}`}
+                style={styles.searchResultItem}
+                onPress={() => navigateToVerse(result.book, result.chapter, result.verse)}
+              >
+                <View style={styles.searchResultHeader}>
+                  <Text style={[styles.searchResultReference, { color: theme.primary }]}>
+                    {bibleService.bibleData.find(b => b.abbrev === result.book)?.name} {result.chapter}:{result.verse}
+                  </Text>
+                </View>
+                <Text 
+                  style={[styles.searchResultText, { color: theme.text }]}
+                  numberOfLines={2}
+                >
+                  {highlightSearchTerm(result.text, searchQuery)}
                 </Text>
               </Pressable>
             ))}
@@ -643,7 +901,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     marginRight: 16,
-    padding: 8,
+    padding: 12,
     backgroundColor: '#f5f5f5',
     borderRadius: 8,
     fontSize: 16,
@@ -661,6 +919,34 @@ const styles = StyleSheet.create({
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+  },
+  searchResultHeader: {
+    marginBottom: 8,
+  },
+  verseReference: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.primary + '15',
+  },
+  verseReferenceText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  referenceIcon: {
+    marginLeft: 4,
+  },
+  searchResultContent: {
+    marginLeft: 8,
+  },
+  highlightedTerm: {
+    fontWeight: 'bold',
+    backgroundColor: Colors.primary + '30',
+    borderRadius: 4,
+    paddingHorizontal: 2,
   },
   content: {
     flex: 1,
@@ -742,5 +1028,161 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginTop: 4,
     marginBottom: 8,
+  },
+  testamentItem: {
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  testamentHeader: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  testamentSubtext: {
+    fontSize: 14,
+    opacity: 0.7,
+  },
+  dropdownHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  backButton: {
+    padding: 8,
+    marginRight: 16,
+  },
+  categoryHeader: {
+    fontSize: 16,
+    fontWeight: '500',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: Colors.primary + '10',
+  },
+  searchStats: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    backgroundColor: '#f9f9f9',
+  },
+  searchStatsText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  relatedWordsContainer: {
+    marginTop: 8,
+  },
+  relatedWordsTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  relatedWordsList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  relatedWordChip: {
+    backgroundColor: Colors.primary + '20',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  relatedWordText: {
+    fontSize: 14,
+  },
+  bookStats: {
+    marginTop: 16,
+  },
+  bookStatsTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginBottom: 8,
+  },
+  bookStatRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  bookStatText: {
+    fontSize: 14,
+  },
+  bookStatCount: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  searchResultLocation: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  searchButtonContainer: {
+    position: 'relative',
+  },
+  searchTooltip: {
+    position: 'absolute',
+    top: 30,
+    right: 0,
+    backgroundColor: Colors.primary,
+    padding: 8,
+    borderRadius: 8,
+    width: 150,
+    opacity: 0,  // Hidden by default
+  },
+  searchTooltipText: {
+    color: '#fff',
+    fontSize: 12,
+    textAlign: 'center',
+  },
+  searchInstructions: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  searchInstructionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 12,
+  },
+  searchInstructionText: {
+    fontSize: 16,
+    marginBottom: 8,
+    paddingLeft: 8,
+  },
+  highlightedTerm: {
+    fontWeight: 'bold',
+    borderRadius: 4,
+    paddingHorizontal: 2,
+  },
+  searchResultItem: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  searchResultReference: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  searchResultText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  selectedVerseContainer: {
+    backgroundColor: Colors.primary + '10',
+    borderRadius: 8,
+    marginHorizontal: -8,
+    paddingHorizontal: 8,
+  },
+  searchingContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 8,
+  },
+  searchingText: {
+    marginLeft: 8,
+    fontSize: 16,
   },
 });

@@ -7,9 +7,26 @@ interface BibleBook {
   chapters: string[][];  // Array of chapters, each chapter is an array of verses
 }
 
+interface SearchResult {
+  book: string;
+  chapter: number;
+  verse: number;
+  text: string;
+  matchIndex: number;
+  keyword: string;
+}
+
 class BibleService {
   private initialized: boolean;
   private bibleData: BibleBook[];
+
+  private readonly wordRelations: { [key: string]: string[] } = {
+    'pig': ['swine', 'hog', 'sow'],
+    'swine': ['pig', 'hog', 'sow'],
+    'god': ['lord', 'almighty', 'creator', 'father'],
+    'jesus': ['christ', 'messiah', 'savior', 'son'],
+    // Add more word relations as needed
+  };
 
   constructor() {
     this.initialized = false;
@@ -133,31 +150,54 @@ class BibleService {
     }
   }
 
-  async searchText(query: string) {
+  async searchText(query: string): Promise<SearchResult[]> {
     await this.initialize();
-    const results = [];
+    const results: SearchResult[] = [];
+    const lowercaseQuery = query.toLowerCase();
 
     try {
+      console.log('Starting search for:', query);
+      
       this.bibleData.forEach(book => {
+        console.log(`Searching in book: ${book.name}`);
         book.chapters.forEach((chapter, chapterIndex) => {
           chapter.forEach((verse, verseIndex) => {
-            if (verse.toLowerCase().includes(query.toLowerCase())) {
+            const lowercaseVerse = verse.toLowerCase();
+            const matchIndex = lowercaseVerse.indexOf(lowercaseQuery);
+            
+            if (matchIndex !== -1) {
+              console.log(`Match found in ${book.name} ${chapterIndex + 1}:${verseIndex + 1}`);
               results.push({
                 book: book.abbrev,
                 chapter: chapterIndex + 1,
                 verse: verseIndex + 1,
-                text: verse
+                text: verse,
+                matchIndex,
+                keyword: query
               });
             }
           });
         });
       });
 
+      console.log(`Search complete. Found ${results.length} matches`);
+      if (results.length > 0) {
+        console.log('First 3 matches:', results.slice(0, 3).map(r => ({
+          reference: `${r.book} ${r.chapter}:${r.verse}`,
+          text: r.text
+        })));
+      }
+
       return results;
     } catch (error) {
       console.error('Error searching text:', error);
       throw error;
     }
+  }
+
+  async findRelatedWords(keyword: string): Promise<string[]> {
+    const lowercaseKeyword = keyword.toLowerCase();
+    return this.wordRelations[lowercaseKeyword] || [];
   }
 
   // Helper method to get book abbreviation from full name
