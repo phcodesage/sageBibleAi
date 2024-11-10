@@ -293,21 +293,60 @@ export default function BibleScreen() {
     );
   };
 
+  const handleNextBook = () => {
+    const currentIndex = bibleService.bibleData.findIndex(b => b.abbrev === currentBook);
+    if (currentIndex < bibleService.bibleData.length - 1) {
+      const nextBook = bibleService.bibleData[currentIndex + 1];
+      setCurrentBook(nextBook.abbrev);
+      setCurrentChapter(1);
+      setChapters([]);
+    }
+  };
+
+  const handlePrevBook = () => {
+    const currentIndex = bibleService.bibleData.findIndex(b => b.abbrev === currentBook);
+    if (currentIndex > 0) {
+      const prevBook = bibleService.bibleData[currentIndex - 1];
+      setCurrentBook(prevBook.abbrev);
+      setCurrentChapter(1);
+      setChapters([]);
+    }
+  };
+
+  // Add new state for book dropdown
+  const [showBookDropdown, setShowBookDropdown] = useState(false);
+
   return (
     <Screen>
       <View style={[styles.header, { backgroundColor: theme.background }]}>
         <Pressable 
+          style={styles.navigationButton}
+          onPress={handlePrevBook}
+        >
+          <FontAwesome name="chevron-left" size={20} color={theme.text} />
+        </Pressable>
+
+        <Pressable 
           style={styles.headerButton}
-          onPress={() => {
-            setShowModal(true);
-            setModalView('books');
-          }}
+          onPress={() => setShowBookDropdown(!showBookDropdown)}
         >
           <Text style={dynamicStyles.headerText}>
             {bibleService.bibleData?.find(b => b.abbrev === currentBook)?.name || currentBook} {currentChapter}
           </Text>
-          <FontAwesome name="chevron-down" size={16} color={theme.text} />
+          <FontAwesome 
+            name={showBookDropdown ? "chevron-up" : "chevron-down"} 
+            size={16} 
+            color={theme.text} 
+          />
         </Pressable>
+
+        <Pressable 
+          style={styles.navigationButton}
+          onPress={handleNextBook}
+        >
+          <FontAwesome name="chevron-right" size={20} color={theme.text} />
+        </Pressable>
+
         <Pressable 
           style={styles.searchButton}
           onPress={() => setShowSearch(true)}
@@ -315,6 +354,47 @@ export default function BibleScreen() {
           <FontAwesome name="search" size={20} color={theme.text} />
         </Pressable>
       </View>
+
+      {/* Book Dropdown */}
+      {showBookDropdown && (
+        <View style={[styles.bookDropdown, { backgroundColor: theme.background }]}>
+          <ScrollView style={styles.bookList}>
+            {bibleService.bibleData.map((book) => (
+              <Pressable
+                key={book.abbrev}
+                style={[
+                  styles.bookDropdownItem,
+                  currentBook === book.abbrev && styles.selectedBookDropdownItem
+                ]}
+                onPress={() => {
+                  setCurrentBook(book.abbrev);
+                  setCurrentChapter(1);
+                  setChapters([]);
+                  setShowBookDropdown(false);
+                }}
+              >
+                <Text 
+                  style={[
+                    styles.bookDropdownText,
+                    { color: theme.text },
+                    currentBook === book.abbrev && styles.selectedBookDropdownText
+                  ]}
+                >
+                  {book.name}
+                </Text>
+                <Text 
+                  style={[
+                    styles.bookAbbrev,
+                    { color: theme.primary }
+                  ]}
+                >
+                  {book.abbrev}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      )}
 
       <ScrollView 
         ref={scrollViewRef}
@@ -458,15 +538,68 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
+  navigationButton: {
+    padding: 8,
+    borderRadius: 8,
+  },
   headerButton: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  bookDropdown: {
+    position: 'absolute',
+    top: 60, // Adjust based on your header height
+    left: 0,
+    right: 0,
+    maxHeight: '50%',
+    zIndex: 1000,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  bookList: {
+    paddingVertical: 8,
+  },
+  bookDropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  selectedBookDropdownItem: {
+    backgroundColor: Colors.primary + '20', // 20 is for opacity
+  },
+  bookDropdownText: {
+    fontSize: 16,
+    flex: 1,
+  },
+  selectedBookDropdownText: {
+    fontWeight: 'bold',
+  },
+  bookAbbrev: {
+    fontSize: 14,
+    marginLeft: 8,
+    opacity: 0.7,
   },
   searchButton: {
     padding: 8,
@@ -528,16 +661,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    backgroundColor: '#fff',
-    gap: 8,
   },
   content: {
     flex: 1,
