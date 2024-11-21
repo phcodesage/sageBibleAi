@@ -291,6 +291,23 @@ class BibleService {
     );
     return bookData?.chapters.length || 0;
   }
+
+  // Add these methods to BibleService class
+  async getNextBook(currentAbbrev: string): Promise<BibleBook | undefined> {
+    await this.initialize();
+    const currentIndex = this.bibleData.findIndex(b => b.abbrev === currentAbbrev);
+    return this.bibleData[currentIndex + 1];
+  }
+
+  async getPrevBook(currentAbbrev: string): Promise<BibleBook | undefined> {
+    await this.initialize();
+    const currentIndex = this.bibleData.findIndex(b => b.abbrev === currentAbbrev);
+    return this.bibleData[currentIndex - 1];
+  }
+
+  getBibleData() {
+    return this.bibleData;
+  }
 }
 
 export const bibleService = new BibleService();

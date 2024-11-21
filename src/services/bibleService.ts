@@ -1,7 +1,25 @@
 import * as FileSystem from 'expo-file-system';
 import { Asset } from 'expo-asset';
 
+interface BibleVerse {
+  text: string;
+  verse: number;
+}
+
+interface BibleChapter {
+  verses: BibleVerse[];
+}
+
+interface BibleBook {
+  book: string;
+  abbrev: string;
+  chapters: string[][];
+}
+
 class BibleService {
+  private initialized: boolean;
+  private bibleData: BibleBook[] | null;
+
   constructor() {
     this.initialized = false;
     this.bibleData = null;
@@ -68,10 +86,14 @@ class BibleService {
     }
   }
 
-  async getVerse(book, chapter, verse) {
+  async getVerse(book: string, chapter: number, verse: number) {
     await this.initialize();
 
     try {
+      if (!this.bibleData) {
+        throw new Error('Bible data not initialized');
+      }
+
       console.log(`Getting verse - Book: ${book}, Chapter: ${chapter}, Verse: ${verse}`);
       
       const bookData = this.bibleData.find(b => 
@@ -90,7 +112,7 @@ class BibleService {
 
       return {
         text: verseText,
-        verse: parseInt(verse)
+        verse: verse
       };
     } catch (error) {
       console.error('Error getting verse:', error);
@@ -98,10 +120,14 @@ class BibleService {
     }
   }
 
-  async getChapter(book, chapterNum) {
+  async getChapter(book: string, chapterNum: number) {
     await this.initialize();
 
     try {
+      if (!this.bibleData) {
+        throw new Error('Bible data not initialized');
+      }
+
       console.log(`Getting chapter - Book: ${book}, Chapter: ${chapterNum}`);
       
       const bookData = this.bibleData.find(b => 
@@ -126,7 +152,7 @@ class BibleService {
 
       return {
         book,
-        chapter: parseInt(chapterNum),
+        chapter: chapterNum,
         verses
       };
     } catch (error) {
@@ -135,9 +161,19 @@ class BibleService {
     }
   }
 
-  async searchText(query) {
+  async searchText(query: string) {
     await this.initialize();
-    const results = [];
+
+    if (!this.bibleData) {
+      throw new Error('Bible data not initialized');
+    }
+
+    const results: Array<{
+      book: string;
+      chapter: number;
+      verse: number;
+      text: string;
+    }> = [];
 
     try {
       console.log('Searching for:', query);
@@ -171,11 +207,17 @@ class BibleService {
 
   async getBooks() {
     await this.initialize();
+    if (!this.bibleData) {
+      throw new Error('Bible data not initialized');
+    }
     return this.bibleData;
   }
 
   async getBookByIndex(index: number) {
     await this.initialize();
+    if (!this.bibleData) {
+      throw new Error('Bible data not initialized');
+    }
     return this.bibleData[index];
   }
 }

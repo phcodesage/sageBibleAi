@@ -1,7 +1,20 @@
+export interface Theme {
+  text: string;
+  background: string;
+  tint: string;
+  tabIconDefault: string;
+  tabIconSelected: string;
+  verseNumber: string;
+  verseBorder: string;
+  verseHighlight: string;
+  modalBackground: string;
+  primary: string;
+}
+
 const tintColorLight = '#2f95dc';
 const tintColorDark = '#fff';
 
-export default {
+const Colors: { light: Theme; dark: Theme } = {
   light: {
     text: '#000',
     background: '#fff',
@@ -26,4 +39,6 @@ export default {
     modalBackground: 'rgba(0,0,0,0.7)',
     primary: '#5fa8dc',
   },
-}; 
+};
+
+export default Colors; 

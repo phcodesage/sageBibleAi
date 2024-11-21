@@ -57,44 +57,12 @@ interface ChapterLayout {
 }
 
 export default function BibleScreen() {
-  // Move getCurrentBookChapters to the top, before any JSX
-  const getCurrentBookChapters = useCallback(async () => {
-    try {
-      return await bibleService.getTotalChapters(currentBook);
-    } catch (error) {
-      console.error('Error getting total chapters:', error);
-      return 0;
-    }
-  }, [currentBook]);
-
-  // Add state for total chapters
-  const [totalChapters, setTotalChapters] = useState(0);
-
-  // Add useEffect to update total chapters when book changes
-  useEffect(() => {
-    getCurrentBookChapters().then(setTotalChapters);
-  }, [currentBook, getCurrentBookChapters]);
-
-  // First, define the parseVerseText function
-  const parseVerseText = (verseText: string): VerseComment => {
-    const commentRegex = /\{([^}]+)\}/g;
-    const comments: string[] = [];
-    let cleanText = verseText;
-    
-    let match;
-    while ((match = commentRegex.exec(verseText)) !== null) {
-      comments.push(match[1]);
-      cleanText = cleanText.replace(match[0], '');
-    }
-
-    return {
-      text: cleanText.trim(),
-      comment: comments.length > 0 ? comments.join(' ') : undefined
-    };
-  };
-
-  // Then declare all state variables
-  const { currentBook, currentChapter, setCurrentBook, setCurrentChapter, fetchVerseContent } = useBible();
+  // First get the context values
+  const { fetchVerseContent } = useBible();
+  
+  // Then declare all state
+  const [currentBook, setCurrentBook] = useState('gn');
+  const [currentChapter, setCurrentChapter] = useState(1);
   const [chapters, setChapters] = useState<ChapterContent[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [modalView, setModalView] = useState<'books' | 'chapters'>('books');
@@ -125,8 +93,9 @@ export default function BibleScreen() {
     showBook: false
   });
   const [isChapterLoading, setIsChapterLoading] = useState(false);
+  const [totalChapters, setTotalChapters] = useState(0);
 
-  // Move all styles that depend on theme or state inside the component
+  // Add missing style properties
   const styles = StyleSheet.create({
     appBar: {
       height: 56,
@@ -169,9 +138,9 @@ export default function BibleScreen() {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      padding: 16,
+      padding: 12,
       borderTopWidth: 1,
-      borderTopColor: '#eee',
+      borderTopColor: theme.verseBorder,
     },
     navButton: {
       flexDirection: 'row',
@@ -273,10 +242,6 @@ export default function BibleScreen() {
     verseTextContainer: {
       flex: 1,
       paddingLeft: 8,
-    },
-    verseText: {
-      fontSize: 20,
-      lineHeight: 32,
     },
     verseComment: {
       fontSize: 16,
@@ -472,7 +437,8 @@ export default function BibleScreen() {
     chapterNavButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      padding: 12,
+      padding: 8,
+      paddingHorizontal: 12,
       borderRadius: 8,
       backgroundColor: theme.background,
       borderWidth: 1,
@@ -481,7 +447,7 @@ export default function BibleScreen() {
     chapterNavText: {
       fontSize: 14,
       fontWeight: '500',
-      marginHorizontal: 8,
+      marginHorizontal: 4,
     },
     buttonPressed: {
       opacity: 0.7,
@@ -492,7 +458,7 @@ export default function BibleScreen() {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      padding: 16,
+      padding: 12,
       borderTopWidth: 1,
       borderTopColor: theme.verseBorder,
     },
@@ -510,6 +476,83 @@ export default function BibleScreen() {
       fontWeight: '500',
       marginHorizontal: 8,
     },
+    modalSubtitle: {
+      fontSize: 14,
+      color: theme.text,
+      marginBottom: 16,
+    },
+    bookItem: {
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.verseBorder,
+    },
+    selectedBook: {
+      backgroundColor: theme.primary + '20',
+    },
+    bookItemText: {
+      fontSize: 16,
+      color: theme.text,
+    },
+    bookDropdown: {
+      position: 'absolute',
+      top: 56,
+      left: 0,
+      right: 0,
+      backgroundColor: theme.background,
+      elevation: 4,
+      maxHeight: '80%',
+    },
+    bookList: {
+      flex: 1,
+    },
+    bookDropdownItem: {
+      padding: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    selectedBookDropdownItem: {
+      backgroundColor: theme.primary + '20',
+    },
+    bookDropdownText: {
+      fontSize: 16,
+      color: theme.text,
+    },
+    bookAbbrev: {
+      fontSize: 14,
+      color: theme.primary,
+    },
+    searchModal: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    searchHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.verseBorder,
+    },
+    searchInput: {
+      flex: 1,
+      fontSize: 16,
+      marginRight: 16,
+      color: theme.text,
+    },
+    searchResults: {
+      flex: 1,
+    },
+    searchResultHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 8,
+    },
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: theme.text,
+    },
   });
 
   // Update the handleChapterSelect function
@@ -517,6 +560,7 @@ export default function BibleScreen() {
     try {
       setIsChapterLoading(true);
       setCurrentChapter(chapter);
+      setSelectedVerses([]); // Clear any selected verses
       
       // Load only the selected chapter
       const chapterData = await fetchVerseContent(`${currentBook} ${chapter}`);
@@ -525,9 +569,17 @@ export default function BibleScreen() {
           chapter: chapter,
           verses: chapterData.verses
         }]);
-      }
 
-      setLayouts(prev => ({ ...prev, showChapter: false }));
+        // Reset scroll position immediately
+        scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+
+        // Clear any previous layouts
+        setLayouts(prev => ({
+          ...prev,
+          chapters: {},
+          showChapter: false
+        }));
+      }
     } catch (error) {
       console.error('Error in handleChapterSelect:', error);
     } finally {
@@ -642,15 +694,6 @@ export default function BibleScreen() {
       if (mostVisible.visibilityPercentage > 0.3 && mostVisible.chapter !== currentChapter) {
         setCurrentChapter(mostVisible.chapter);
         setVisibleChapter(mostVisible.chapter);
-
-        // Load more chapters when approaching the end
-        if (mostVisible.chapter === Math.max(...chapters.map(c => c.chapter))) {
-          loadChapters(currentBook, mostVisible.chapter + 1);
-        }
-        // Load previous chapters when near the start
-        else if (mostVisible.chapter === Math.min(...chapters.map(c => c.chapter))) {
-          loadChapters(currentBook, mostVisible.chapter - 1);
-        }
       }
     }
   }, [layouts.chapters, currentChapter, chapters]);
@@ -725,7 +768,7 @@ export default function BibleScreen() {
           // Update search stats
           const bookOccurrences: { [key: string]: number } = {};
           results.forEach(result => {
-            const bookName = bibleService.bibleData.find(b => b.abbrev === result.book)?.name || result.book;
+            const bookName = bibleService.getBibleData().find(b => b.abbrev === result.book)?.name || result.book;
             bookOccurrences[bookName] = (bookOccurrences[bookName] || 0) + 1;
           });
 
@@ -747,7 +790,7 @@ export default function BibleScreen() {
     }, 300);
 
     setSearchTimeout(newTimeout);
-  }, []);
+  }, [searchTimeout]);
 
   const handleVersePress = (verseId: number) => {
     setSelectedVerses(prev => 
@@ -837,33 +880,29 @@ export default function BibleScreen() {
     );
   };
 
-  const handleNextBook = () => {
-    const currentIndex = bibleService.bibleData.findIndex(b => b.abbrev === currentBook);
-    if (currentIndex < bibleService.bibleData.length - 1) {
-      const nextBook = bibleService.bibleData[currentIndex + 1];
+  const handleNextBook = async () => {
+    const nextBook = await bibleService.getNextBook(currentBook);
+    if (nextBook) {
       setCurrentBook(nextBook.abbrev);
       setCurrentChapter(1);
       setVisibleChapter(1);
       setChapters([]);
-      // Reset scroll position with a slight delay
-      setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 0, animated: false });
-      }, 100);
+      setSelectedVerses([]);
+      setLayouts(prev => ({ ...prev, chapters: {} }));
+      scrollViewRef.current?.scrollTo({ y: 0, animated: false });
     }
   };
 
-  const handlePrevBook = () => {
-    const currentIndex = bibleService.bibleData.findIndex(b => b.abbrev === currentBook);
-    if (currentIndex > 0) {
-      const prevBook = bibleService.bibleData[currentIndex - 1];
+  const handlePrevBook = async () => {
+    const prevBook = await bibleService.getPrevBook(currentBook);
+    if (prevBook) {
       setCurrentBook(prevBook.abbrev);
       setCurrentChapter(1);
       setVisibleChapter(1);
       setChapters([]);
-      // Reset scroll position with a slight delay
-      setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: 0, animated: false });
-      }, 100);
+      setSelectedVerses([]);
+      setLayouts(prev => ({ ...prev, chapters: {} }));
+      scrollViewRef.current?.scrollTo({ y: 0, animated: false });
     }
   };
 
@@ -922,7 +961,7 @@ export default function BibleScreen() {
                   {category.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
                 </Text>
                 {books.map(bookName => {
-                  const book = bibleService.bibleData.find(b => b.name === bookName);
+                  const book = bibleService.getBibleData().find(b => b.name === bookName);
                   if (!book) return null;
                   return (
                     <Pressable
@@ -1040,6 +1079,15 @@ export default function BibleScreen() {
     // Handle back press if needed
   };
 
+  // Add this useEffect to update totalChapters when book changes
+  useEffect(() => {
+    const updateTotalChapters = async () => {
+      const total = await bibleService.getTotalChapters(currentBook);
+      setTotalChapters(total);
+    };
+    updateTotalChapters();
+  }, [currentBook]);
+
   return (
     <Screen>
       <View style={[styles.appBar, { backgroundColor: theme.background }]}>
@@ -1053,7 +1101,7 @@ export default function BibleScreen() {
         >
           <MaterialIcons name="chevron-left" size={24} color={theme.primary} />
           <Text style={[styles.appBarButtonText, { color: theme.text }]}>
-            {bibleService.bibleData.find(b => b.abbrev === currentBook)?.name}
+            {bibleService.getBibleData().find(b => b.abbrev === currentBook)?.name}
           </Text>
         </Pressable>
 
@@ -1069,7 +1117,7 @@ export default function BibleScreen() {
           }}
         >
           <Text style={[styles.appBarTitleText, { color: theme.text }]}>
-            {bibleService.bibleData?.find(b => b.abbrev === currentBook)?.name} {currentChapter}
+            {bibleService.getBibleData().find(b => b.abbrev === currentBook)?.name} {currentChapter}
           </Text>
           <MaterialIcons 
             name={layouts.showChapter ? "expand-less" : "expand-more"} 
@@ -1087,7 +1135,7 @@ export default function BibleScreen() {
           onPress={handleNextBook}
         >
           <Text style={[styles.appBarButtonText, { color: theme.text }]}>
-            {bibleService.bibleData.find((b, i, arr) => 
+            {bibleService.getBibleData().find((b, i, arr) => 
               arr[arr.findIndex(book => book.abbrev === currentBook) + 1]?.abbrev === b.abbrev
             )?.name}
           </Text>
@@ -1258,7 +1306,7 @@ export default function BibleScreen() {
               autoFocus
             />
             <Pressable onPress={() => setShowSearch(false)}>
-              <FontAwesome name="times" size={24} color={Colors.primary} />
+              <FontAwesome name="times" size={24} color={theme.primary} />
             </Pressable>
           </View>
 
@@ -1266,7 +1314,7 @@ export default function BibleScreen() {
             <View style={styles.searchStats}>
               {isSearching ? (
                 <View style={styles.searchingContainer}>
-                  <ActivityIndicator color={Colors.primary} />
+                  <ActivityIndicator color={theme.primary} />
                   <Text style={[styles.searchingText, { color: theme.text }]}>
                     Searching...
                   </Text>
@@ -1288,7 +1336,7 @@ export default function BibleScreen() {
               >
                 <View style={styles.searchResultHeader}>
                   <Text style={[styles.searchResultReference, { color: theme.primary }]}>
-                    {bibleService.bibleData.find(b => b.abbrev === result.book)?.name} {result.chapter}:{result.verse}
+                    {bibleService.getBibleData().find(b => b.abbrev === result.book)?.name} {result.chapter}:{result.verse}
                   </Text>
                 </View>
                 <Text 
@@ -1320,11 +1368,11 @@ export default function BibleScreen() {
                   style={styles.backButton}
                   onPress={() => setModalView('books')}
                 >
-                  <FontAwesome name="arrow-left" size={20} color={Colors.primary} />
+                  <FontAwesome name="arrow-left" size={20} color={theme.primary} />
                 </Pressable>
               )}
               <Pressable onPress={() => setShowModal(false)}>
-                <FontAwesome name="times" size={24} color={Colors.primary} />
+                <FontAwesome name="times" size={24} color={theme.primary} />
               </Pressable>
             </View>
             {renderModalContent()}
@@ -1406,10 +1454,6 @@ const staticStyles = StyleSheet.create({
   verseTextContainer: {
     flex: 1,
     paddingLeft: 8,
-  },
-  verseText: {
-    fontSize: 20,
-    lineHeight: 32,
   },
   verseComment: {
     fontSize: 16,
@@ -1605,7 +1649,8 @@ const staticStyles = StyleSheet.create({
   chapterNavButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
+    padding: 8,
+    paddingHorizontal: 12,
     borderRadius: 8,
     backgroundColor: Colors.background,
     borderWidth: 1,
@@ -1614,7 +1659,7 @@ const staticStyles = StyleSheet.create({
   chapterNavText: {
     fontSize: 14,
     fontWeight: '500',
-    marginHorizontal: 8,
+    marginHorizontal: 4,
   },
   buttonPressed: {
     opacity: 0.7,
@@ -1625,7 +1670,7 @@ const staticStyles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    padding: 12,
     borderTopWidth: 1,
     borderTopColor: Colors.verseBorder,
   },
@@ -1644,3 +1689,21 @@ const staticStyles = StyleSheet.create({
     marginHorizontal: 8,
   },
 });
+
+// Update the parseVerseText function definition
+const parseVerseText = (text: string): VerseComment => {
+  const commentRegex = /\{([^}]+)\}/g;
+  const comments: string[] = [];
+  let cleanText = text;
+  
+  let match;
+  while ((match = commentRegex.exec(text)) !== null) {
+    comments.push(match[1]);
+    cleanText = cleanText.replace(match[0], '');
+  }
+
+  return {
+    text: cleanText.trim(),
+    comment: comments.length > 0 ? comments.join(' ') : undefined
+  };
+};
