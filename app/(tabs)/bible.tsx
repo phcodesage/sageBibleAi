@@ -1,9 +1,9 @@
 import { View, Text } from 'react-native';
 
-export default function AIChatScreen() {
+export default function BibleScreen() {
   return (
     <View>
-      <Text>AI Chat Screen</Text>
+      <Text>Bible Screen</Text>
     </View>
   );
 } 

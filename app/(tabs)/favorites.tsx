@@ -1,9 +1,9 @@
 import { View, Text } from 'react-native';
 
-export default function AIChatScreen() {
+export default function FavoritesScreen() {
   return (
     <View>
-      <Text>AI Chat Screen</Text>
+      <Text>Favorites Screen</Text>
     </View>
   );
 } 

@@ -18,7 +18,8 @@ interface SearchResult {
 
 class BibleService {
   private initialized: boolean;
-  private bibleData: BibleBook[];
+  private bibleData: any;
+  private initializationError: Error | null;
 
   private readonly wordRelations: { [key: string]: string[] } = {
     'pig': ['swine', 'hog', 'sow'],
@@ -30,58 +31,63 @@ class BibleService {
 
   constructor() {
     this.initialized = false;
-    this.bibleData = [];
+    this.bibleData = null;
+    this.initializationError = null;
   }
 
   async initialize() {
     if (this.initialized) return;
 
     try {
+      console.log('Starting Bible Service initialization...');
       const bibleDir = `${FileSystem.documentDirectory}bible`;
       const jsonPath = `${bibleDir}/en_kjv.json`;
 
-      console.log('Initializing Bible Service...');
-      
-      // Check if file exists in document directory
+      console.log('Checking for Bible data at:', jsonPath);
       const fileInfo = await FileSystem.getInfoAsync(jsonPath);
-      let rawData;
       
       if (!fileInfo.exists) {
-        console.log('Loading Bible data from assets...');
+        console.log('Bible data not found, loading from assets...');
         await FileSystem.makeDirectoryAsync(bibleDir, { intermediates: true });
         
-        // Load the asset file directly
-        rawData = require('../../bible/json/en_kjv.json');
-        await FileSystem.writeAsStringAsync(jsonPath, JSON.stringify(rawData));
+        const asset = require('../../bible/json/en_kjv.json');
+        console.log('Asset loaded, first book:', asset[0]?.abbrev);
+        
+        this.bibleData = asset;
+        await FileSystem.writeAsStringAsync(jsonPath, JSON.stringify(asset));
+        console.log('Bible data written to file system');
       } else {
         console.log('Loading Bible data from file system...');
         const jsonContent = await FileSystem.readAsStringAsync(jsonPath);
-        rawData = JSON.parse(jsonContent);
+        this.bibleData = JSON.parse(jsonContent);
+        console.log('Bible data loaded from file system');
       }
 
-      // Ensure the data is in the correct format
-      if (!Array.isArray(rawData) || !rawData[0]?.abbrev || !rawData[0]?.name || !Array.isArray(rawData[0]?.chapters)) {
+      if (!this.bibleData || !Array.isArray(this.bibleData) || this.bibleData.length === 0) {
         throw new Error('Invalid Bible data format');
       }
 
-      this.bibleData = rawData;
-
-      // Log the first book's structure to verify
-      const firstBook = this.bibleData[0];
-      console.log('First book loaded:', {
-        abbrev: firstBook.abbrev,
-        name: firstBook.name,
-        chapterCount: firstBook.chapters.length,
-        firstChapterVerseCount: firstBook.chapters[0]?.length,
-        sampleVerses: firstBook.chapters[0]?.slice(0, 3)
+      console.log('Bible data loaded successfully:', {
+        bookCount: this.bibleData.length,
+        firstBook: this.bibleData[0]?.abbrev,
+        lastBook: this.bibleData[this.bibleData.length - 1]?.abbrev
       });
 
       this.initialized = true;
-      console.log('Bible Service initialized successfully');
+      this.initializationError = null;
     } catch (error) {
       console.error('Failed to initialize Bible service:', error);
+      this.initializationError = error as Error;
       throw error;
     }
+  }
+
+  // Add method to check initialization status
+  getInitializationStatus() {
+    return {
+      initialized: this.initialized,
+      error: this.initializationError
+    };
   }
 
   async getVerse(book: string, chapter: number, verse: number) {
@@ -92,7 +98,7 @@ class BibleService {
         throw new Error('Invalid chapter or verse number');
       }
 
-      const bookData = this.bibleData.find(b => 
+      const bookData = this.bibleData.find((b: any) => 
         b.abbrev.toLowerCase() === book.toLowerCase()
       );
       
@@ -120,7 +126,7 @@ class BibleService {
 
       console.log(`Getting chapter - Book: ${book}, Chapter: ${chapterNum}`);
       
-      const bookData = this.bibleData.find(b => 
+      const bookData = this.bibleData.find((b: any) => 
         b.abbrev.toLowerCase() === book.toLowerCase()
       );
       
@@ -134,7 +140,7 @@ class BibleService {
       console.log(`Chapter ${chapterNum} found with ${chapter.length} verses`);
       console.log('First 3 verses:', chapter.slice(0, 3));
 
-      const verses = chapter.map((text, index) => ({
+      const verses = chapter.map((text: any, index: number) => ({
         verse: index + 1,
         text
       }));
@@ -158,10 +164,10 @@ class BibleService {
     try {
       console.log('Starting search for:', query);
       
-      this.bibleData.forEach(book => {
+      this.bibleData.forEach((book: any) => {
         console.log(`Searching in book: ${book.name}`);
-        book.chapters.forEach((chapter, chapterIndex) => {
-          chapter.forEach((verse, verseIndex) => {
+        book.chapters.forEach((chapter: any, chapterIndex: number ) => {
+          chapter.forEach((verse: any, verseIndex: number   ) => {
             const lowercaseVerse = verse.toLowerCase();
             const matchIndex = lowercaseVerse.indexOf(lowercaseQuery);
             
@@ -203,15 +209,87 @@ class BibleService {
   // Helper method to get book abbreviation from full name
   getBookAbbrev(fullName: string): string {
     const bookMap: { [key: string]: string } = {
+      // Old Testament
       'genesis': 'gn',
       'exodus': 'ex',
       'leviticus': 'lv',
       'numbers': 'nm',
       'deuteronomy': 'dt',
-      // Add more mappings as needed
+      'joshua': 'js',
+      'judges': 'jg',
+      'ruth': 'rt',
+      '1 samuel': '1sm',
+      '2 samuel': '2sm',
+      '1 kings': '1kg',
+      '2 kings': '2kg',
+      '1 chronicles': '1ch',
+      '2 chronicles': '2ch',
+      'ezra': 'ez',
+      'nehemiah': 'nh',
+      'esther': 'et',
+      'job': 'jb',
+      'psalms': 'ps',
+      'proverbs': 'pr',
+      'ecclesiastes': 'ec',
+      'song of solomon': 'ss',
+      'isaiah': 'is',
+      'jeremiah': 'jr',
+      'lamentations': 'lm',
+      'ezekiel': 'ez',
+      'daniel': 'dn',
+      'hosea': 'hs',
+      'joel': 'jl',
+      'amos': 'am',
+      'obadiah': 'ob',
+      'jonah': 'jn',
+      'micah': 'mc',
+      'nahum': 'nm',
+      'habakkuk': 'hb',
+      'zephaniah': 'zp',
+      'haggai': 'hg',
+      'zechariah': 'zc',
+      'malachi': 'ml',
+      
+      // New Testament
+      'matthew': 'mt',
+      'mark': 'mk',
+      'luke': 'lk',
+      'john': 'jn',
+      'acts': 'ac',
+      'romans': 'rm',
+      '1 corinthians': '1cr',
+      '2 corinthians': '2cr',
+      'galatians': 'gl',
+      'ephesians': 'ep',
+      'philippians': 'ph',
+      'colossians': 'cl',
+      '1 thessalonians': '1th',
+      '2 thessalonians': '2th',
+      '1 timothy': '1tm',
+      '2 timothy': '2tm',
+      'titus': 'tt',
+      'philemon': 'pm',
+      'hebrews': 'hb',
+      'james': 'jm',
+      '1 peter': '1pt',
+      '2 peter': '2pt',
+      '1 john': '1jn',
+      '2 john': '2jn',
+      '3 john': '3jn',
+      'jude': 'jd',
+      'revelation': 'rv'
     };
     
     return bookMap[fullName.toLowerCase()] || fullName.toLowerCase();
+  }
+
+  // Add this method to BibleService class
+  async getTotalChapters(book: string): Promise<number> {
+    await this.initialize();
+    const bookData = this.bibleData.find((b: any) => 
+      b.abbrev.toLowerCase() === book.toLowerCase()
+    );
+    return bookData?.chapters.length || 0;
   }
 }
 

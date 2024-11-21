@@ -3,7 +3,7 @@ import { Text } from '../components/Text';
 import { Screen } from '../components/Screen';
 import { useBible } from '../context/BibleContext';
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { FontAwesome } from '@expo/vector-icons';
+import { FontAwesome, MaterialIcons } from '@expo/vector-icons';
 import { bibleBooks } from '../constants/bible-books';
 import Colors from '../constants/Colors';
 import { useColorScheme } from 'react-native';
@@ -50,7 +50,50 @@ const BIBLE_STRUCTURE = {
   }
 };
 
+// Add this interface for chapter layout information
+interface ChapterLayout {
+  y: number;
+  height: number;
+}
+
 export default function BibleScreen() {
+  // Move getCurrentBookChapters to the top, before any JSX
+  const getCurrentBookChapters = useCallback(async () => {
+    try {
+      return await bibleService.getTotalChapters(currentBook);
+    } catch (error) {
+      console.error('Error getting total chapters:', error);
+      return 0;
+    }
+  }, [currentBook]);
+
+  // Add state for total chapters
+  const [totalChapters, setTotalChapters] = useState(0);
+
+  // Add useEffect to update total chapters when book changes
+  useEffect(() => {
+    getCurrentBookChapters().then(setTotalChapters);
+  }, [currentBook, getCurrentBookChapters]);
+
+  // First, define the parseVerseText function
+  const parseVerseText = (verseText: string): VerseComment => {
+    const commentRegex = /\{([^}]+)\}/g;
+    const comments: string[] = [];
+    let cleanText = verseText;
+    
+    let match;
+    while ((match = commentRegex.exec(verseText)) !== null) {
+      comments.push(match[1]);
+      cleanText = cleanText.replace(match[0], '');
+    }
+
+    return {
+      text: cleanText.trim(),
+      comment: comments.length > 0 ? comments.join(' ') : undefined
+    };
+  };
+
+  // Then declare all state variables
   const { currentBook, currentChapter, setCurrentBook, setCurrentChapter, fetchVerseContent } = useBible();
   const [chapters, setChapters] = useState<ChapterContent[]>([]);
   const [showModal, setShowModal] = useState(false);
@@ -72,65 +115,103 @@ export default function BibleScreen() {
   const [isSearching, setIsSearching] = useState(false);
   const [visibleChapter, setVisibleChapter] = useState(currentChapter);
   const [isScrolling, setIsScrolling] = useState(false);
-  const [chapterLayouts, setChapterLayouts] = useState<{[key: string]: number}>({});
+  const [layouts, setLayouts] = useState<{
+    chapters: {[key: string]: ChapterLayout},
+    showChapter: boolean,
+    showBook: boolean
+  }>({
+    chapters: {},
+    showChapter: false,
+    showBook: false
+  });
+  const [isChapterLoading, setIsChapterLoading] = useState(false);
 
   // Move all styles that depend on theme or state inside the component
   const styles = StyleSheet.create({
-    header: {
+    appBar: {
+      height: 56,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-      backgroundColor: theme.background,
-      borderBottomWidth: 1,
-      borderBottomColor: '#eee',
-      elevation: isScrolling ? 4 : 0,
+      paddingHorizontal: 8,
+      elevation: 4,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: isScrolling ? 0.2 : 0,
-      shadowRadius: 4,
+      shadowOpacity: 0.2,
+      shadowRadius: 2,
     },
-    headerLeft: {
+    appBarButton: {
       flexDirection: 'row',
       alignItems: 'center',
-    },
-    headerRight: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
-    iconButton: {
-      padding: 10,
-      borderRadius: 20,
-      backgroundColor: isScrolling ? `${Colors.light.primary}10` : 'transparent',
-    },
-    titleButton: {
-      flex: 1,
-      flexDirection: 'column',
-      alignItems: 'center',
-      paddingHorizontal: 16,
+      paddingHorizontal: 8,
       paddingVertical: 4,
+      borderRadius: 8,
     },
-    titleText: {
+    appBarButtonText: {
+      fontSize: 16,
+      fontWeight: '500',
+      marginHorizontal: 4,
+    },
+    appBarTitle: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+      marginHorizontal: 8,
+      paddingHorizontal: 12,
+    },
+    appBarTitleText: {
       fontSize: 18,
-      fontWeight: 'bold',
-      color: theme.text,
+      fontWeight: '500',
     },
-    chapterText: {
-      fontSize: 14,
-      color: theme.text,
-      opacity: 0.8,
+    bottomNav: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 16,
+      borderTopWidth: 1,
+      borderTopColor: '#eee',
     },
-    dropdownIcon: {
-      marginTop: 2,
+    navButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 8,
     },
-    searchButton: {
-      backgroundColor: `${Colors.light.primary}10`,
+    navButtonText: {
+      fontSize: 16,
+      marginHorizontal: 4,
     },
-    buttonPressed: {
-      opacity: 0.7,
-      transform: [{ scale: 0.95 }],
+    chapterDropdown: {
+      position: 'absolute',
+      top: 56,
+      left: 0,
+      right: 0,
+      maxHeight: '80%',
+      padding: 16,
+      elevation: 4,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.2,
+      shadowRadius: 2,
+    },
+    chapterItem: {
+      flex: 1,
+      aspectRatio: 1,
+      margin: 4,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 8,
+      backgroundColor: '#f5f5f5',
+      elevation: 2,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.2,
+      shadowRadius: 1.5,
+    },
+    chapterItemText: {
+      fontSize: 16,
+      fontWeight: '500',
     },
     content: {
       flex: 1,
@@ -174,17 +255,8 @@ export default function BibleScreen() {
       alignItems: 'center',
       marginBottom: 16,
     },
-    chapterItem: {
-      flex: 1,
-      aspectRatio: 1,
-      margin: 4,
-      justifyContent: 'center',
-      alignItems: 'center',
-      backgroundColor: '#f5f5f5',
-      borderRadius: 8,
-    },
     selectedChapter: {
-      backgroundColor: Colors.primary,
+      backgroundColor: theme.primary,
     },
     selectedChapterText: {
       color: '#fff',
@@ -242,7 +314,7 @@ export default function BibleScreen() {
       fontWeight: '500',
       paddingHorizontal: 16,
       paddingVertical: 12,
-      backgroundColor: Colors.primary + '10',
+      backgroundColor: theme.primary + '10',
     },
     searchStats: {
       padding: 16,
@@ -268,7 +340,7 @@ export default function BibleScreen() {
       gap: 8,
     },
     relatedWordChip: {
-      backgroundColor: Colors.primary + '20',
+      backgroundColor: theme.primary + '20',
       paddingHorizontal: 12,
       paddingVertical: 6,
       borderRadius: 16,
@@ -308,7 +380,7 @@ export default function BibleScreen() {
       position: 'absolute',
       top: 30,
       right: 0,
-      backgroundColor: Colors.primary,
+      backgroundColor: theme.primary,
       padding: 8,
       borderRadius: 8,
       width: 150,
@@ -353,7 +425,7 @@ export default function BibleScreen() {
       lineHeight: 20,
     },
     selectedVerseContainer: {
-      backgroundColor: Colors.primary + '10',
+      backgroundColor: theme.primary + '10',
       borderRadius: 8,
       marginHorizontal: -8,
       paddingHorizontal: 8,
@@ -368,71 +440,174 @@ export default function BibleScreen() {
       marginLeft: 8,
       fontSize: 16,
     },
+    loadingOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      zIndex: 1000,
+    },
+    loadingText: {
+      marginTop: 12,
+      fontSize: 16,
+      fontWeight: '500',
+    },
+    chapterNavigation: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.verseBorder,
+      elevation: 2,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.2,
+      shadowRadius: 2,
+    },
+    chapterNavButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 12,
+      borderRadius: 8,
+      backgroundColor: theme.background,
+      borderWidth: 1,
+      borderColor: theme.verseBorder,
+    },
+    chapterNavText: {
+      fontSize: 14,
+      fontWeight: '500',
+      marginHorizontal: 8,
+    },
+    buttonPressed: {
+      opacity: 0.7,
+      transform: [{ scale: 0.95 }],
+      backgroundColor: theme.primary + '10',
+    },
+    bottomNav: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 16,
+      borderTopWidth: 1,
+      borderTopColor: theme.verseBorder,
+    },
+    bookNavButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 12,
+      borderRadius: 8,
+      backgroundColor: theme.background,
+      borderWidth: 1,
+      borderColor: theme.verseBorder,
+    },
+    bookNavText: {
+      fontSize: 14,
+      fontWeight: '500',
+      marginHorizontal: 8,
+    },
   });
 
-  // Load multiple chapters at once
-  const loadChapters = useCallback(async (book: string, startChapter: number) => {
-    setIsLoading(true);
+  // Update the handleChapterSelect function
+  const handleChapterSelect = async (chapter: number) => {
     try {
-      console.log(`Loading chapters for ${book}, starting at chapter ${startChapter}`);
+      setIsChapterLoading(true);
+      setCurrentChapter(chapter);
       
-      // Only load valid chapters (1 and above)
-      const chapterPromises = [];
-      for (let offset = -2; offset <= 2; offset++) {
-        const targetChapter = startChapter + offset;
-        if (targetChapter > 0) { // Only fetch valid chapters
-          console.log(`Fetching chapter ${targetChapter}`);
-          chapterPromises.push(fetchVerseContent(`${book} ${targetChapter}`));
-        }
+      // Load only the selected chapter
+      const chapterData = await fetchVerseContent(`${currentBook} ${chapter}`);
+      if (chapterData) {
+        setChapters([{
+          chapter: chapter,
+          verses: chapterData.verses
+        }]);
       }
-      
-      const results = await Promise.all(chapterPromises);
-      console.log('Received results:', results.map(r => ({
-        chapter: r?.chapter,
-        verseCount: r?.verses?.length
-      })));
 
-      const validResults = results
-        .filter(result => result?.verses)
-        .map(result => ({
-          chapter: result.chapter,
-          verses: result.verses
-        }));
-
-      console.log('Valid results:', validResults.map(r => ({
-        chapter: r.chapter,
-        verseCount: r.verses.length
-      })));
-
-      setChapters(prev => {
-        // Remove duplicates and sort chapters
-        const allChapters = [...prev, ...validResults];
-        const uniqueChapters = allChapters.reduce((acc, current) => {
-          const exists = acc.find(item => item.chapter === current.chapter);
-          if (!exists && current.chapter > 0) { // Only include valid chapters
-            acc.push(current);
-          }
-          return acc;
-        }, [] as ChapterContent[]);
-
-        const sortedChapters = uniqueChapters.sort((a, b) => a.chapter - b.chapter);
-        console.log('Final chapters state:', sortedChapters.map(c => ({
-          chapter: c.chapter,
-          verseCount: c.verses.length
-        })));
-
-        return sortedChapters;
-      });
+      setLayouts(prev => ({ ...prev, showChapter: false }));
     } catch (error) {
-      console.error('Error loading chapters:', error);
+      console.error('Error in handleChapterSelect:', error);
+    } finally {
+      setIsChapterLoading(false);
     }
-    setIsLoading(false);
-  }, [fetchVerseContent]);
+  };
 
+  // Update the ScrollView section
+  <ScrollView 
+    ref={scrollViewRef}
+    style={styles.content}
+    onScroll={handleScroll}
+    scrollEventThrottle={16}
+  >
+    {/* Chapter Content - Only show current chapter */}
+    {chapters.map((chapter) => (
+      <View 
+        key={chapter.chapter} 
+        style={[styles.chapterContainer, { backgroundColor: theme.background }]}
+      >
+        <Text variant="chapter" style={{ color: theme.text }}>
+          Chapter {chapter.chapter}
+        </Text>
+        <View style={styles.versesContainer}>
+          {chapter.verses.map((verse) => {
+            // Parse the verse text here, before using it
+            const parsedVerse = parseVerseText(verse.text);
+            
+            return (
+              <Pressable
+                key={`${chapter.chapter}-${verse.verse}`}
+                id={`verse-${chapter.chapter}-${verse.verse}`}
+                onPress={() => handleVersePress(verse.verse)}
+                style={[
+                  styles.verseContainer,
+                  selectedVerses.includes(verse.verse) && styles.selectedVerseContainer
+                ]}
+              >
+                <Text variant="verseNumber" style={{ color: theme.verseNumber }}>
+                  {verse.verse}
+                </Text>
+                <View style={styles.verseTextContainer}>
+                  <Text 
+                    variant="verse"
+                    style={[
+                      styles.verseText,
+                      { color: theme.text },
+                      selectedVerses.includes(verse.verse) && {
+                        backgroundColor: theme.verseHighlight
+                      }
+                    ]}
+                  >
+                    {parsedVerse.text}
+                  </Text>
+                  {parsedVerse.comment && (
+                    <Text 
+                      style={[
+                        styles.verseComment,
+                        { color: theme.primary }
+                      ]}
+                    >
+                      {parsedVerse.comment}
+                    </Text>
+                  )}
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      </View>
+    ))}
+  </ScrollView>
+
+  // Remove the continuous scrolling useEffect and loadChapters useEffect
+  // Only keep the initial chapter load
   useEffect(() => {
-    loadChapters(currentBook, currentChapter);
+    handleChapterSelect(currentChapter);
   }, [currentBook, currentChapter]);
 
+  // Update handleScroll with more logging
   const handleScroll = useCallback((event: any) => {
     if (!isScrolling) {
       setIsScrolling(true);
@@ -440,25 +615,45 @@ export default function BibleScreen() {
 
     const scrollY = event.nativeEvent.contentOffset.y;
     const layoutHeight = event.nativeEvent.layoutMeasurement.height;
-    const viewportCenter = scrollY + (layoutHeight / 2);
+    const viewportTop = scrollY;
+    const viewportBottom = scrollY + layoutHeight;
 
-    // Find the chapter closest to the center of the viewport
-    let closestChapter = visibleChapter;
-    let minDistance = Infinity;
+    // Find which chapters are visible in the viewport
+    const visibleChapters = Object.entries(layouts.chapters)
+      .map(([chapter, layout]) => {
+        const visibleHeight = Math.min(layout.y + layout.height, viewportBottom) - 
+                      Math.max(layout.y, viewportTop);
+        const visibilityPercentage = visibleHeight / layout.height;
+        
+        return {
+          chapter: parseInt(chapter),
+          visibleHeight,
+          visibilityPercentage,
+          layout
+        };
+      })
+      .filter(({ visibleHeight }) => visibleHeight > 0)
+      .sort((a, b) => b.visibilityPercentage - a.visibilityPercentage);
 
-    Object.entries(chapterLayouts).forEach(([chapter, yPosition]) => {
-      const distance = Math.abs(yPosition - viewportCenter);
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestChapter = parseInt(chapter);
+    if (visibleChapters.length > 0) {
+      const mostVisible = visibleChapters[0];
+      
+      // Update current chapter when more than 30% of a chapter is visible
+      if (mostVisible.visibilityPercentage > 0.3 && mostVisible.chapter !== currentChapter) {
+        setCurrentChapter(mostVisible.chapter);
+        setVisibleChapter(mostVisible.chapter);
+
+        // Load more chapters when approaching the end
+        if (mostVisible.chapter === Math.max(...chapters.map(c => c.chapter))) {
+          loadChapters(currentBook, mostVisible.chapter + 1);
+        }
+        // Load previous chapters when near the start
+        else if (mostVisible.chapter === Math.min(...chapters.map(c => c.chapter))) {
+          loadChapters(currentBook, mostVisible.chapter - 1);
+        }
       }
-    });
-
-    if (closestChapter !== visibleChapter) {
-      setVisibleChapter(closestChapter);
-      setCurrentChapter(closestChapter);
     }
-  }, [chapterLayouts, visibleChapter]);
+  }, [layouts.chapters, currentChapter, chapters]);
 
   useEffect(() => {
     if (isScrolling) {
@@ -474,13 +669,6 @@ export default function BibleScreen() {
     setCurrentChapter(1);
     setChapters([]);
     setModalView('chapters');
-  };
-
-  const handleChapterSelect = (chapter: number) => {
-    setCurrentChapter(chapter);
-    setChapters([]);
-    setShowModal(false);
-    scrollViewRef.current?.scrollTo({ y: 0, animated: true });
   };
 
   // Add this function to handle verse navigation
@@ -567,23 +755,6 @@ export default function BibleScreen() {
         ? prev.filter(id => id !== verseId)
         : [...prev, verseId]
     );
-  };
-
-  const parseVerseText = (verseText: string): VerseComment => {
-    const commentRegex = /\{([^}]+)\}/g;
-    const comments: string[] = [];
-    let cleanText = verseText;
-    
-    let match;
-    while ((match = commentRegex.exec(verseText)) !== null) {
-      comments.push(match[1]);
-      cleanText = cleanText.replace(match[0], '');
-    }
-
-    return {
-      text: cleanText.trim(),
-      comment: comments.length > 0 ? comments.join(' ') : undefined
-    };
   };
 
   const renderModalContent = () => {
@@ -674,7 +845,10 @@ export default function BibleScreen() {
       setCurrentChapter(1);
       setVisibleChapter(1);
       setChapters([]);
-      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      // Reset scroll position with a slight delay
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+      }, 100);
     }
   };
 
@@ -686,12 +860,12 @@ export default function BibleScreen() {
       setCurrentChapter(1);
       setVisibleChapter(1);
       setChapters([]);
-      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      // Reset scroll position with a slight delay
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+      }, 100);
     }
   };
-
-  // Add new state for book dropdown
-  const [showBookDropdown, setShowBookDropdown] = useState(false);
 
   const renderBookDropdown = () => (
     <View style={[styles.bookDropdown, { backgroundColor: theme.background }]}>
@@ -761,7 +935,7 @@ export default function BibleScreen() {
                         setCurrentBook(book.abbrev);
                         setCurrentChapter(1);
                         setChapters([]);
-                        setShowBookDropdown(false);
+                        setLayouts(prev => ({ ...prev, showBook: false }));
                         setSelectedTestament(null);
                       }}
                     >
@@ -862,98 +1036,94 @@ export default function BibleScreen() {
     );
   };
 
+  const handleBackPress = () => {
+    // Handle back press if needed
+  };
+
   return (
     <Screen>
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Pressable 
-            style={({ pressed }) => [
-              styles.iconButton,
-              pressed && styles.buttonPressed
-            ]}
-            onPress={handlePrevBook}
-          >
-            <FontAwesome name="chevron-left" size={20} color={theme.text} />
-          </Pressable>
-        </View>
-
-        <Pressable
+      <View style={[styles.appBar, { backgroundColor: theme.background }]}>
+        {/* Previous Book Button */}
+        <Pressable 
           style={({ pressed }) => [
-            styles.titleButton,
+            styles.appBarButton,
             pressed && styles.buttonPressed
           ]}
-          onPress={() => setShowBookDropdown(!showBookDropdown)}
+          onPress={handlePrevBook}
         >
-          <Text style={styles.titleText}>
-            {bibleService.bibleData.find(b => b.abbrev === currentBook)?.name || currentBook}
+          <MaterialIcons name="chevron-left" size={24} color={theme.primary} />
+          <Text style={[styles.appBarButtonText, { color: theme.text }]}>
+            {bibleService.bibleData.find(b => b.abbrev === currentBook)?.name}
           </Text>
-          <Text style={styles.chapterText}>
-            Chapter {visibleChapter}
+        </Pressable>
+
+        {/* Book and Chapter Title */}
+        <Pressable 
+          style={({ pressed }) => [
+            styles.appBarTitle,
+            pressed && { backgroundColor: theme.primary + '15' },
+            { borderRadius: 8, paddingVertical: 4 }
+          ]}
+          onPress={() => {
+            setLayouts(prev => ({ ...prev, showChapter: !prev.showChapter }));
+          }}
+        >
+          <Text style={[styles.appBarTitleText, { color: theme.text }]}>
+            {bibleService.bibleData?.find(b => b.abbrev === currentBook)?.name} {currentChapter}
           </Text>
-          <FontAwesome 
-            name={showBookDropdown ? "chevron-up" : "chevron-down"} 
-            size={16} 
+          <MaterialIcons 
+            name={layouts.showChapter ? "expand-less" : "expand-more"} 
+            size={24} 
             color={theme.text} 
-            style={styles.dropdownIcon}
           />
         </Pressable>
 
-        <View style={styles.headerRight}>
-          <Pressable 
-            style={({ pressed }) => [
-              styles.iconButton,
-              pressed && styles.buttonPressed
-            ]}
-            onPress={handleNextBook}
-          >
-            <FontAwesome name="chevron-right" size={20} color={theme.text} />
-          </Pressable>
+        {/* Next Book Button */}
+        <Pressable 
+          style={({ pressed }) => [
+            styles.appBarButton,
+            pressed && styles.buttonPressed
+          ]}
+          onPress={handleNextBook}
+        >
+          <Text style={[styles.appBarButtonText, { color: theme.text }]}>
+            {bibleService.bibleData.find((b, i, arr) => 
+              arr[arr.findIndex(book => book.abbrev === currentBook) + 1]?.abbrev === b.abbrev
+            )?.name}
+          </Text>
+          <MaterialIcons name="chevron-right" size={24} color={theme.primary} />
+        </Pressable>
 
-          <Pressable 
-            style={({ pressed }) => [
-              styles.iconButton,
-              styles.searchButton,
-              pressed && styles.buttonPressed
-            ]}
-            onPress={() => {
-              setShowSearch(true);
-              setSearchQuery('');
-              setSearchResults([]);
-              setSearchStats({ total: 0, bookOccurrences: {}, relatedWords: [] });
-            }}
-          >
-            <FontAwesome name="search" size={20} color={theme.text} />
-          </Pressable>
-        </View>
+        {/* Menu Button */}
+        <Pressable 
+          style={styles.appBarButton}
+          onPress={() => {/* Handle menu */}}
+        >
+          <MaterialIcons name="more-vert" size={24} color={theme.text} />
+        </Pressable>
       </View>
 
-      {/* Book Dropdown */}
-      {showBookDropdown && renderBookDropdown()}
-
+      {/* Main Content */}
       <ScrollView 
         ref={scrollViewRef}
-        style={[styles.content, { backgroundColor: theme.background }]}
+        style={styles.content}
         onScroll={handleScroll}
         scrollEventThrottle={16}
       >
+        {/* Chapter Content - Only show current chapter */}
         {chapters.map((chapter) => (
           <View 
             key={chapter.chapter} 
             style={[styles.chapterContainer, { backgroundColor: theme.background }]}
-            onLayout={(event) => {
-              const layout = event.nativeEvent.layout;
-              setChapterLayouts(prev => ({
-                ...prev,
-                [chapter.chapter]: layout.y
-              }));
-            }}
           >
             <Text variant="chapter" style={{ color: theme.text }}>
               Chapter {chapter.chapter}
             </Text>
             <View style={styles.versesContainer}>
               {chapter.verses.map((verse) => {
+                // Parse the verse text here, before using it
                 const parsedVerse = parseVerseText(verse.text);
+                
                 return (
                   <Pressable
                     key={`${chapter.chapter}-${verse.verse}`}
@@ -982,7 +1152,6 @@ export default function BibleScreen() {
                       </Text>
                       {parsedVerse.comment && (
                         <Text 
-                          variant="verseComment"
                           style={[
                             styles.verseComment,
                             { color: theme.primary }
@@ -999,6 +1168,78 @@ export default function BibleScreen() {
           </View>
         ))}
       </ScrollView>
+
+      {/* Bottom Book Navigation */}
+      <View style={[styles.bottomNav, { backgroundColor: theme.background }]}>
+        <Pressable 
+          style={({ pressed }) => [
+            styles.chapterNavButton,
+            pressed && styles.buttonPressed,
+            { opacity: currentChapter <= 1 ? 0.5 : 1 }
+          ]}
+          onPress={() => currentChapter > 1 && handleChapterSelect(currentChapter - 1)}
+          disabled={currentChapter <= 1}
+        >
+          <MaterialIcons name="chevron-left" size={24} color={theme.primary} />
+          <Text style={[styles.chapterNavText, { color: theme.text }]}>
+            Chapter {currentChapter - 1}
+          </Text>
+        </Pressable>
+
+        <Pressable 
+          style={({ pressed }) => [
+            styles.chapterNavButton,
+            pressed && styles.buttonPressed,
+            { opacity: currentChapter >= totalChapters ? 0.5 : 1 }
+          ]}
+          onPress={() => currentChapter < totalChapters && handleChapterSelect(currentChapter + 1)}
+          disabled={currentChapter >= totalChapters}
+        >
+          <Text style={[styles.chapterNavText, { color: theme.text }]}>
+            Chapter {currentChapter + 1}
+          </Text>
+          <MaterialIcons name="chevron-right" size={24} color={theme.primary} />
+        </Pressable>
+      </View>
+
+      {/* Chapter Dropdown */}
+      {layouts.showChapter && (
+        <View style={[styles.chapterDropdown, { backgroundColor: theme.background }]}>
+          {isChapterLoading && (
+            <View style={styles.loadingOverlay}>
+              <ActivityIndicator size="large" color={theme.primary} />
+              <Text style={[styles.loadingText, { color: theme.text }]}>
+                Loading Chapter...
+              </Text>
+            </View>
+          )}
+          <FlatList
+            data={Array.from({ length: totalChapters }, (_, i) => i + 1)}
+            numColumns={5}
+            keyExtractor={item => item.toString()}
+            initialNumToRender={20}
+            maxToRenderPerBatch={20}
+            windowSize={5}
+            renderItem={({ item }) => (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.chapterItem,
+                  currentChapter === item && { backgroundColor: theme.primary },
+                  pressed && { backgroundColor: theme.primary + '40' }
+                ]}
+                onPress={() => handleChapterSelect(item)}
+              >
+                <Text style={[
+                  styles.chapterItemText,
+                  { color: currentChapter === item ? '#fff' : theme.text }
+                ]}>
+                  {item}
+                </Text>
+              </Pressable>
+            )}
+          />
+        </View>
+      )}
 
       {/* Search Modal */}
       <Modal
@@ -1331,5 +1572,75 @@ const staticStyles = StyleSheet.create({
   searchingText: {
     marginLeft: 8,
     fontSize: 16,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  chapterNavigation: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 1,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.verseBorder,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  chapterNavButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.verseBorder,
+  },
+  chapterNavText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginHorizontal: 8,
+  },
+  buttonPressed: {
+    opacity: 0.7,
+    transform: [{ scale: 0.95 }],
+    backgroundColor: Colors.primary + '10',
+  },
+  bottomNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: Colors.verseBorder,
+  },
+  bookNavButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.verseBorder,
+  },
+  bookNavText: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginHorizontal: 8,
   },
 });

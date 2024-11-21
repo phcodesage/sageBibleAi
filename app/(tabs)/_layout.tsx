@@ -1,21 +1,54 @@
 import { Tabs } from 'expo-router';
 import { useEffect } from 'react';
-import * as NavigationBar from 'expo-navigation-bar';
+import { FontAwesome } from '@expo/vector-icons';
+import Colors from '../constants/Colors';
+import { useColorScheme } from 'react-native';
 
 export default function TabLayout() {
-  useEffect(() => {
-    // Hide the navigation bar
-    NavigationBar.setVisibilityAsync('hidden');
-    // Optional: Set behavior when swiping from bottom
-    NavigationBar.setBehaviorAsync('overlay-swipe');
-  }, []);
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
 
   return (
     <Tabs screenOptions={{ 
       headerShown: false,
-      tabBarStyle: { display: 'none' } // Hide the tab bar
+      tabBarStyle: { 
+        backgroundColor: theme.background,
+        borderTopWidth: 1,
+        borderTopColor: theme.verseBorder,
+        height: 60,
+        paddingBottom: 8,
+        paddingTop: 8,
+      },
+      tabBarActiveTintColor: theme.primary,
+      tabBarInactiveTintColor: theme.tabIconDefault,
     }}>
-      <Tabs.Screen name="index" />
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: 'Home',
+          tabBarIcon: ({ color, size }) => (
+            <FontAwesome name="home" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="bible"
+        options={{
+          title: 'Bible',
+          tabBarIcon: ({ color, size }) => (
+            <FontAwesome name="book" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="ai"
+        options={{
+          title: 'AI Chat',
+          tabBarIcon: ({ color, size }) => (
+            <FontAwesome name="comments" size={size} color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }

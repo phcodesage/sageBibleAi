@@ -44,7 +44,7 @@ export function DownloadScreen({ onComplete }: DownloadScreenProps) {
   return (
     <Screen>
       <View style={styles.container}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ActivityIndicator size="large" color={Colors.light.primary} />
         <Text style={styles.status}>{status}</Text>
         {progress > 0 && (
           <>
@@ -86,12 +86,12 @@ const styles = StyleSheet.create({
   },
   progressBar: {
     height: '100%',
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.light.primary,
   },
   progressText: {
     marginTop: 8,
     fontSize: 14,
-    color: Colors.primary,
+    color: Colors.light.primary,
   },
   bookInfo: {
     marginTop: 4,
