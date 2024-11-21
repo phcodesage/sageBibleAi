@@ -70,44 +70,304 @@ export default function BibleScreen() {
   const theme = Colors[colorScheme ?? 'light'];
   const [selectedTestament, setSelectedTestament] = useState<'old' | 'new' | null>(null);
   const [isSearching, setIsSearching] = useState(false);
+  const [visibleChapter, setVisibleChapter] = useState(currentChapter);
+  const [isScrolling, setIsScrolling] = useState(false);
+  const [chapterLayouts, setChapterLayouts] = useState<{[key: string]: number}>({});
 
-  // Move styles that depend on theme inside the component
-  const dynamicStyles = StyleSheet.create({
-    headerText: {
+  // Move all styles that depend on theme or state inside the component
+  const styles = StyleSheet.create({
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      backgroundColor: theme.background,
+      borderBottomWidth: 1,
+      borderBottomColor: '#eee',
+      elevation: isScrolling ? 4 : 0,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: isScrolling ? 0.2 : 0,
+      shadowRadius: 4,
+    },
+    headerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    headerRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    iconButton: {
+      padding: 10,
+      borderRadius: 20,
+      backgroundColor: isScrolling ? `${Colors.light.primary}10` : 'transparent',
+    },
+    titleButton: {
+      flex: 1,
+      flexDirection: 'column',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 4,
+    },
+    titleText: {
       fontSize: 18,
       fontWeight: 'bold',
       color: theme.text,
     },
-    modalTitle: {
+    chapterText: {
+      fontSize: 14,
+      color: theme.text,
+      opacity: 0.8,
+    },
+    dropdownIcon: {
+      marginTop: 2,
+    },
+    searchButton: {
+      backgroundColor: `${Colors.light.primary}10`,
+    },
+    buttonPressed: {
+      opacity: 0.7,
+      transform: [{ scale: 0.95 }],
+    },
+    content: {
+      flex: 1,
+    },
+    chapterContainer: {
+      marginBottom: 16,
+      paddingVertical: 8,
+    },
+    versesContainer: {
+      padding: 16,
+    },
+    verseContainer: {
+      flexDirection: 'row',
+      paddingVertical: 4,
+      alignItems: 'flex-start',
+    },
+    verseText: {
+      flex: 1,
       fontSize: 20,
-      fontWeight: 'bold',
-      color: theme.text,
+      lineHeight: 32,
+      paddingLeft: 8,
     },
-    chapterItemText: {
+    firstVerse: {
+      marginTop: 0,
+    },
+    modalContainer: {
+      flex: 1,
+      justifyContent: 'flex-end',
+      backgroundColor: 'rgba(0,0,0,0.5)',
+    },
+    modalContent: {
+      backgroundColor: '#fff',
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      padding: 16,
+      maxHeight: '80%',
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    chapterItem: {
+      flex: 1,
+      aspectRatio: 1,
+      margin: 4,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: '#f5f5f5',
+      borderRadius: 8,
+    },
+    selectedChapter: {
+      backgroundColor: Colors.primary,
+    },
+    selectedChapterText: {
+      color: '#fff',
+    },
+    backButton: {
+      position: 'absolute',
+      left: 0,
+      padding: 8,
+    },
+    loadingContainer: {
+      padding: 20,
+      alignItems: 'center',
+    },
+    verseTextContainer: {
+      flex: 1,
+      paddingLeft: 8,
+    },
+    verseText: {
+      fontSize: 20,
+      lineHeight: 32,
+    },
+    verseComment: {
       fontSize: 16,
-      color: theme.text,
+      fontStyle: 'italic',
+      marginTop: 4,
+      marginBottom: 8,
     },
-    modalSubtitle: {
+    testamentItem: {
+      padding: 20,
+      borderBottomWidth: 1,
+      borderBottomColor: '#eee',
+    },
+    testamentHeader: {
+      fontSize: 24,
+      fontWeight: 'bold',
+      marginBottom: 4,
+    },
+    testamentSubtext: {
+      fontSize: 14,
+      opacity: 0.7,
+    },
+    dropdownHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: '#eee',
+    },
+    backButton: {
+      padding: 8,
+      marginRight: 16,
+    },
+    categoryHeader: {
+      fontSize: 16,
+      fontWeight: '500',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: Colors.primary + '10',
+    },
+    searchStats: {
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: '#eee',
+      backgroundColor: '#f9f9f9',
+    },
+    searchStatsText: {
+      fontSize: 16,
+      fontWeight: '500',
+    },
+    relatedWordsContainer: {
+      marginTop: 8,
+    },
+    relatedWordsTitle: {
+      fontSize: 14,
+      fontWeight: '500',
+      marginBottom: 4,
+    },
+    relatedWordsList: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    relatedWordChip: {
+      backgroundColor: Colors.primary + '20',
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 16,
+    },
+    relatedWordText: {
+      fontSize: 14,
+    },
+    bookStats: {
+      marginTop: 16,
+    },
+    bookStatsTitle: {
+      fontSize: 14,
+      fontWeight: '500',
+      marginBottom: 8,
+    },
+    bookStatRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      paddingVertical: 4,
+    },
+    bookStatText: {
+      fontSize: 14,
+    },
+    bookStatCount: {
+      fontSize: 14,
+      fontWeight: '500',
+    },
+    searchResultLocation: {
+      fontSize: 14,
+      fontWeight: 'bold',
+      marginBottom: 4,
+    },
+    searchButtonContainer: {
+      position: 'relative',
+    },
+    searchTooltip: {
+      position: 'absolute',
+      top: 30,
+      right: 0,
+      backgroundColor: Colors.primary,
+      padding: 8,
+      borderRadius: 8,
+      width: 150,
+      opacity: 0,  // Hidden by default
+    },
+    searchTooltipText: {
+      color: '#fff',
+      fontSize: 12,
+      textAlign: 'center',
+    },
+    searchInstructions: {
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: '#eee',
+    },
+    searchInstructionTitle: {
       fontSize: 18,
       fontWeight: 'bold',
       marginBottom: 12,
-      color: theme.primary,
     },
-    bookItemText: {
-      fontSize: 14,
-      textAlign: 'center',
-      color: theme.text,
+    searchInstructionText: {
+      fontSize: 16,
+      marginBottom: 8,
+      paddingLeft: 8,
     },
-    searchResultVerse: {
-      fontSize: 14,
+    highlightedTerm: {
       fontWeight: 'bold',
-      color: theme.primary,
-      marginBottom: 4,
+      borderRadius: 4,
+      paddingHorizontal: 2,
+    },
+    searchResultItem: {
+      padding: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: '#eee',
+    },
+    searchResultReference: {
+      fontSize: 16,
+      fontWeight: 'bold',
     },
     searchResultText: {
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    selectedVerseContainer: {
+      backgroundColor: Colors.primary + '10',
+      borderRadius: 8,
+      marginHorizontal: -8,
+      paddingHorizontal: 8,
+    },
+    searchingContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 8,
+    },
+    searchingText: {
+      marginLeft: 8,
       fontSize: 16,
-      color: theme.text,
-    }
+    },
   });
 
   // Load multiple chapters at once
@@ -173,25 +433,41 @@ export default function BibleScreen() {
     loadChapters(currentBook, currentChapter);
   }, [currentBook, currentChapter]);
 
-  const handleScroll = ({ nativeEvent }: any) => {
-    const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
-    const paddingToBottom = 2000; // Increased from 1000 to load earlier
-    const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= 
-      contentSize.height - paddingToBottom;
-
-    if (isCloseToBottom && !isLoading) {
-      const lastChapter = chapters[chapters.length - 1]?.chapter || currentChapter;
-      loadChapters(currentBook, lastChapter + 1);
+  const handleScroll = useCallback((event: any) => {
+    if (!isScrolling) {
+      setIsScrolling(true);
     }
 
-    const isCloseToTop = contentOffset.y <= paddingToBottom;
-    if (isCloseToTop && !isLoading && currentChapter > 1) {
-      const firstChapter = chapters[0]?.chapter || currentChapter;
-      if (firstChapter > 1) {
-        loadChapters(currentBook, Math.max(1, firstChapter - 3));
+    const scrollY = event.nativeEvent.contentOffset.y;
+    const layoutHeight = event.nativeEvent.layoutMeasurement.height;
+    const viewportCenter = scrollY + (layoutHeight / 2);
+
+    // Find the chapter closest to the center of the viewport
+    let closestChapter = visibleChapter;
+    let minDistance = Infinity;
+
+    Object.entries(chapterLayouts).forEach(([chapter, yPosition]) => {
+      const distance = Math.abs(yPosition - viewportCenter);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestChapter = parseInt(chapter);
       }
+    });
+
+    if (closestChapter !== visibleChapter) {
+      setVisibleChapter(closestChapter);
+      setCurrentChapter(closestChapter);
     }
-  };
+  }, [chapterLayouts, visibleChapter]);
+
+  useEffect(() => {
+    if (isScrolling) {
+      const timeout = setTimeout(() => {
+        setIsScrolling(false);
+      }, 150);
+      return () => clearTimeout(timeout);
+    }
+  }, [isScrolling]);
 
   const handleBookSelect = (book: string) => {
     setCurrentBook(book);
@@ -317,7 +593,7 @@ export default function BibleScreen() {
 
       return (
         <>
-          <Text style={dynamicStyles.modalSubtitle}>Old Testament</Text>
+          <Text style={styles.modalSubtitle}>Old Testament</Text>
           <FlatList
             data={oldTestament}
             numColumns={2}
@@ -331,7 +607,7 @@ export default function BibleScreen() {
                 onPress={() => handleBookSelect(item)}
               >
                 <Text style={[
-                  dynamicStyles.bookItemText,
+                  styles.bookItemText,
                   currentBook === item && styles.selectedBook
                 ]}>
                   {item}
@@ -339,7 +615,7 @@ export default function BibleScreen() {
               </Pressable>
             )}
           />
-          <Text style={[dynamicStyles.modalSubtitle, { marginTop: 16 }]}>New Testament</Text>
+          <Text style={[styles.modalSubtitle, { marginTop: 16 }]}>New Testament</Text>
           <FlatList
             data={newTestament}
             numColumns={2}
@@ -353,7 +629,7 @@ export default function BibleScreen() {
                 onPress={() => handleBookSelect(item)}
               >
                 <Text style={[
-                  dynamicStyles.bookItemText,
+                  styles.bookItemText,
                   currentBook === item && styles.selectedBook
                 ]}>
                   {item}
@@ -379,7 +655,7 @@ export default function BibleScreen() {
             onPress={() => handleChapterSelect(item)}
           >
             <Text style={[
-              dynamicStyles.chapterItemText,
+              styles.chapterItemText,
               currentChapter === item && styles.selectedChapter
             ]}>
               {item}
@@ -396,7 +672,9 @@ export default function BibleScreen() {
       const nextBook = bibleService.bibleData[currentIndex + 1];
       setCurrentBook(nextBook.abbrev);
       setCurrentChapter(1);
+      setVisibleChapter(1);
       setChapters([]);
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
     }
   };
 
@@ -406,7 +684,9 @@ export default function BibleScreen() {
       const prevBook = bibleService.bibleData[currentIndex - 1];
       setCurrentBook(prevBook.abbrev);
       setCurrentChapter(1);
+      setVisibleChapter(1);
       setChapters([]);
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
     }
   };
 
@@ -584,53 +864,67 @@ export default function BibleScreen() {
 
   return (
     <Screen>
-      <View style={[styles.header, { backgroundColor: theme.background }]}>
-        <Pressable 
-          style={styles.navigationButton}
-          onPress={handlePrevBook}
-        >
-          <FontAwesome name="chevron-left" size={20} color={theme.text} />
-        </Pressable>
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          <Pressable 
+            style={({ pressed }) => [
+              styles.iconButton,
+              pressed && styles.buttonPressed
+            ]}
+            onPress={handlePrevBook}
+          >
+            <FontAwesome name="chevron-left" size={20} color={theme.text} />
+          </Pressable>
+        </View>
 
-        <Pressable 
-          style={styles.headerButton}
+        <Pressable
+          style={({ pressed }) => [
+            styles.titleButton,
+            pressed && styles.buttonPressed
+          ]}
           onPress={() => setShowBookDropdown(!showBookDropdown)}
         >
-          <Text style={dynamicStyles.headerText}>
-            {bibleService.bibleData?.find(b => b.abbrev === currentBook)?.name || currentBook} {currentChapter}
+          <Text style={styles.titleText}>
+            {bibleService.bibleData.find(b => b.abbrev === currentBook)?.name || currentBook}
+          </Text>
+          <Text style={styles.chapterText}>
+            Chapter {visibleChapter}
           </Text>
           <FontAwesome 
             name={showBookDropdown ? "chevron-up" : "chevron-down"} 
             size={16} 
             color={theme.text} 
+            style={styles.dropdownIcon}
           />
         </Pressable>
 
-        <Pressable 
-          style={styles.navigationButton}
-          onPress={handleNextBook}
-        >
-          <FontAwesome name="chevron-right" size={20} color={theme.text} />
-        </Pressable>
+        <View style={styles.headerRight}>
+          <Pressable 
+            style={({ pressed }) => [
+              styles.iconButton,
+              pressed && styles.buttonPressed
+            ]}
+            onPress={handleNextBook}
+          >
+            <FontAwesome name="chevron-right" size={20} color={theme.text} />
+          </Pressable>
 
-        <Pressable 
-          style={styles.searchButton}
-          onPress={() => {
-            setShowSearch(true);
-            setSearchQuery('');  // Clear previous search
-            setSearchResults([]);
-            setSearchStats({ total: 0, bookOccurrences: {}, relatedWords: [] });
-          }}
-        >
-          <View style={styles.searchButtonContainer}>
+          <Pressable 
+            style={({ pressed }) => [
+              styles.iconButton,
+              styles.searchButton,
+              pressed && styles.buttonPressed
+            ]}
+            onPress={() => {
+              setShowSearch(true);
+              setSearchQuery('');
+              setSearchResults([]);
+              setSearchStats({ total: 0, bookOccurrences: {}, relatedWords: [] });
+            }}
+          >
             <FontAwesome name="search" size={20} color={theme.text} />
-            <View style={styles.searchTooltip}>
-              <Text style={styles.searchTooltipText}>
-                Search for words, phrases, or references
-              </Text>
-            </View>
-          </View>
-        </Pressable>
+          </Pressable>
+        </View>
       </View>
 
       {/* Book Dropdown */}
@@ -643,7 +937,17 @@ export default function BibleScreen() {
         scrollEventThrottle={16}
       >
         {chapters.map((chapter) => (
-          <View key={chapter.chapter} style={[styles.chapterContainer, { backgroundColor: theme.background }]}>
+          <View 
+            key={chapter.chapter} 
+            style={[styles.chapterContainer, { backgroundColor: theme.background }]}
+            onLayout={(event) => {
+              const layout = event.nativeEvent.layout;
+              setChapterLayouts(prev => ({
+                ...prev,
+                [chapter.chapter]: layout.y
+              }));
+            }}
+          >
             <Text variant="chapter" style={{ color: theme.text }}>
               Chapter {chapter.chapter}
             </Text>
@@ -767,7 +1071,7 @@ export default function BibleScreen() {
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={dynamicStyles.modalTitle}>
+              <Text style={styles.modalTitle}>
                 {modalView === 'books' ? 'Select Book' : `Select Chapter (${currentBook})`}
               </Text>
               {modalView === 'chapters' && (
@@ -790,170 +1094,13 @@ export default function BibleScreen() {
   );
 }
 
-// Static styles that don't depend on theme
-const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 8,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  navigationButton: {
-    padding: 8,
-    borderRadius: 8,
-  },
-  headerButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-  },
-  bookDropdown: {
-    position: 'absolute',
-    top: 60, // Adjust based on your header height
-    left: 0,
-    right: 0,
-    maxHeight: '50%',
-    zIndex: 1000,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  bookList: {
-    paddingVertical: 8,
-  },
-  bookDropdownItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  selectedBookDropdownItem: {
-    backgroundColor: Colors.primary + '20', // 20 is for opacity
-  },
-  bookDropdownText: {
-    fontSize: 16,
-    flex: 1,
-  },
-  selectedBookDropdownText: {
-    fontWeight: 'bold',
-  },
-  bookAbbrev: {
-    fontSize: 14,
-    marginLeft: 8,
-    opacity: 0.7,
-  },
-  searchButton: {
-    padding: 8,
-  },
-  versesContainer: {
-    padding: 16,
-  },
-  verseContainer: {
-    flexDirection: 'row',
-    paddingVertical: 4,
-    alignItems: 'flex-start',
-  },
-  verseText: {
-    flex: 1,
-    fontSize: 20,
-    lineHeight: 32,
-    paddingLeft: 8,
-  },
-  highlightedVerse: {
-    backgroundColor: '#fff3cd',
-  },
-  searchModal: {
-    flex: 1,
-    backgroundColor: '#fff',
-    marginTop: 50,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 5,
-    elevation: 5,
-  },
-  searchHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  searchInput: {
-    flex: 1,
-    marginRight: 16,
-    padding: 12,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-    fontSize: 16,
-  },
-  resultCount: {
-    padding: 16,
-    color: '#666',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  searchResults: {
-    flex: 1,
-  },
-  searchResult: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  searchResultHeader: {
-    marginBottom: 8,
-  },
-  verseReference: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 4,
-    backgroundColor: Colors.primary + '15',
-  },
-  verseReferenceText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  referenceIcon: {
-    marginLeft: 4,
-  },
-  searchResultContent: {
-    marginLeft: 8,
-  },
-  highlightedTerm: {
-    fontWeight: 'bold',
-    backgroundColor: Colors.primary + '30',
-    borderRadius: 4,
-    paddingHorizontal: 2,
-  },
+// Move static styles outside the component
+const staticStyles = StyleSheet.create({
   content: {
     flex: 1,
   },
   chapterContainer: {
     marginBottom: 16,
-    backgroundColor: '#fff',
     paddingVertical: 8,
   },
   versesContainer: {
