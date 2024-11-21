@@ -135,21 +135,49 @@ export default function BibleScreen() {
       fontWeight: '500',
     },
     bottomNav: {
+      backgroundColor: theme.background,
+      borderTopWidth: 1,
+      borderTopColor: theme.verseBorder,
+      paddingVertical: 8,
+    },
+    chapterButtonsContainer: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      padding: 12,
-      borderTopWidth: 1,
-      borderTopColor: theme.verseBorder,
+      width: '100%',
+      paddingHorizontal: 16,
     },
-    navButton: {
+    chapterNavButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      padding: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      backgroundColor: theme.background,
+      borderWidth: 1,
+      borderColor: theme.verseBorder,
+      minWidth: 80,
+      justifyContent: 'center',
     },
-    navButtonText: {
+    chapterNavText: {
       fontSize: 16,
+      fontWeight: '500',
       marginHorizontal: 4,
+    },
+    currentChapterIndicator: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 8,
+      backgroundColor: theme.primary + '10',
+    },
+    currentChapterText: {
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    buttonPressed: {
+      opacity: 0.7,
+      transform: [{ scale: 0.98 }],
+      backgroundColor: theme.primary + '10',
     },
     chapterDropdown: {
       position: 'absolute',
@@ -184,10 +212,6 @@ export default function BibleScreen() {
     },
     content: {
       flex: 1,
-    },
-    chapterContainer: {
-      marginBottom: 16,
-      paddingVertical: 8,
     },
     versesContainer: {
       padding: 16,
@@ -434,34 +458,6 @@ export default function BibleScreen() {
       shadowOpacity: 0.2,
       shadowRadius: 2,
     },
-    chapterNavButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      padding: 8,
-      paddingHorizontal: 12,
-      borderRadius: 8,
-      backgroundColor: theme.background,
-      borderWidth: 1,
-      borderColor: theme.verseBorder,
-    },
-    chapterNavText: {
-      fontSize: 14,
-      fontWeight: '500',
-      marginHorizontal: 4,
-    },
-    buttonPressed: {
-      opacity: 0.7,
-      transform: [{ scale: 0.95 }],
-      backgroundColor: theme.primary + '10',
-    },
-    bottomNav: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      padding: 12,
-      borderTopWidth: 1,
-      borderTopColor: theme.verseBorder,
-    },
     bookNavButton: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -552,6 +548,15 @@ export default function BibleScreen() {
       fontSize: 20,
       fontWeight: 'bold',
       color: theme.text,
+    },
+    searchButton: {
+      padding: 12,
+      borderRadius: 8,
+      backgroundColor: theme.background,
+      borderWidth: 1,
+      borderColor: theme.verseBorder,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
   });
 
@@ -880,29 +885,80 @@ export default function BibleScreen() {
     );
   };
 
+  // Update the book navigation handlers
   const handleNextBook = async () => {
-    const nextBook = await bibleService.getNextBook(currentBook);
-    if (nextBook) {
-      setCurrentBook(nextBook.abbrev);
-      setCurrentChapter(1);
-      setVisibleChapter(1);
-      setChapters([]);
-      setSelectedVerses([]);
-      setLayouts(prev => ({ ...prev, chapters: {} }));
-      scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+    try {
+      const nextBook = await bibleService.getNextBook(currentBook);
+      if (nextBook) {
+        // Always start with chapter 1 when switching books
+        setCurrentBook(nextBook.abbrev);
+        setCurrentChapter(1);  // Always reset to chapter 1
+        setVisibleChapter(1);
+        setChapters([]);
+        setSelectedVerses([]);
+        setLayouts(prev => ({ 
+          ...prev, 
+          chapters: {},
+          showChapter: false,
+          showBook: false
+        }));
+        
+        // Load first chapter of the new book
+        const chapterData = await fetchVerseContent(`${nextBook.abbrev} 1`);  // Always load chapter 1
+        if (chapterData) {
+          setChapters([{
+            chapter: 1,
+            verses: chapterData.verses
+          }]);
+        }
+        
+        // Reset scroll position
+        scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+        
+        // Update total chapters for the new book
+        const nextBookTotalChapters = await bibleService.getTotalChapters(nextBook.abbrev);
+        setTotalChapters(nextBookTotalChapters);
+      }
+    } catch (error) {
+      console.error('Error switching to next book:', error);
     }
   };
 
   const handlePrevBook = async () => {
-    const prevBook = await bibleService.getPrevBook(currentBook);
-    if (prevBook) {
-      setCurrentBook(prevBook.abbrev);
-      setCurrentChapter(1);
-      setVisibleChapter(1);
-      setChapters([]);
-      setSelectedVerses([]);
-      setLayouts(prev => ({ ...prev, chapters: {} }));
-      scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+    try {
+      const prevBook = await bibleService.getPrevBook(currentBook);
+      if (prevBook) {
+        // Always start with chapter 1 when switching books
+        setCurrentBook(prevBook.abbrev);
+        setCurrentChapter(1);  // Always reset to chapter 1
+        setVisibleChapter(1);
+        setChapters([]);
+        setSelectedVerses([]);
+        setLayouts(prev => ({ 
+          ...prev, 
+          chapters: {},
+          showChapter: false,
+          showBook: false
+        }));
+        
+        // Load first chapter of the new book
+        const chapterData = await fetchVerseContent(`${prevBook.abbrev} 1`);  // Always load chapter 1
+        if (chapterData) {
+          setChapters([{
+            chapter: 1,
+            verses: chapterData.verses
+          }]);
+        }
+        
+        // Reset scroll position
+        scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+        
+        // Update total chapters for the new book
+        const prevBookTotalChapters = await bibleService.getTotalChapters(prevBook.abbrev);
+        setTotalChapters(prevBookTotalChapters);
+      }
+    } catch (error) {
+      console.error('Error switching to previous book:', error);
     }
   };
 
@@ -1219,35 +1275,50 @@ export default function BibleScreen() {
 
       {/* Bottom Book Navigation */}
       <View style={[styles.bottomNav, { backgroundColor: theme.background }]}>
-        <Pressable 
-          style={({ pressed }) => [
-            styles.chapterNavButton,
-            pressed && styles.buttonPressed,
-            { opacity: currentChapter <= 1 ? 0.5 : 1 }
-          ]}
-          onPress={() => currentChapter > 1 && handleChapterSelect(currentChapter - 1)}
-          disabled={currentChapter <= 1}
-        >
-          <MaterialIcons name="chevron-left" size={24} color={theme.primary} />
-          <Text style={[styles.chapterNavText, { color: theme.text }]}>
-            Chapter {currentChapter - 1}
-          </Text>
-        </Pressable>
+        <View style={styles.chapterButtonsContainer}>
+          {/* Previous Chapter button */}
+          {currentChapter > 1 && (
+            <Pressable 
+              style={({ pressed }) => [
+                styles.chapterNavButton,
+                pressed && styles.buttonPressed
+              ]}
+              onPress={() => handleChapterSelect(currentChapter - 1)}
+            >
+              <MaterialIcons name="chevron-left" size={24} color={theme.primary} />
+              <Text style={[styles.chapterNavText, { color: theme.text }]}>
+                {currentChapter - 1}
+              </Text>
+            </Pressable>
+          )}
 
-        <Pressable 
-          style={({ pressed }) => [
-            styles.chapterNavButton,
-            pressed && styles.buttonPressed,
-            { opacity: currentChapter >= totalChapters ? 0.5 : 1 }
-          ]}
-          onPress={() => currentChapter < totalChapters && handleChapterSelect(currentChapter + 1)}
-          disabled={currentChapter >= totalChapters}
-        >
-          <Text style={[styles.chapterNavText, { color: theme.text }]}>
-            Chapter {currentChapter + 1}
-          </Text>
-          <MaterialIcons name="chevron-right" size={24} color={theme.primary} />
-        </Pressable>
+          {/* Search Button */}
+          <Pressable 
+            style={({ pressed }) => [
+              styles.searchButton,
+              pressed && styles.buttonPressed
+            ]}
+            onPress={() => setShowSearch(true)}
+          >
+            <MaterialIcons name="search" size={24} color={theme.primary} />
+          </Pressable>
+
+          {/* Next Chapter button */}
+          {currentChapter < totalChapters && (
+            <Pressable 
+              style={({ pressed }) => [
+                styles.chapterNavButton,
+                pressed && styles.buttonPressed
+              ]}
+              onPress={() => handleChapterSelect(currentChapter + 1)}
+            >
+              <Text style={[styles.chapterNavText, { color: theme.text }]}>
+                {currentChapter + 1}
+              </Text>
+              <MaterialIcons name="chevron-right" size={24} color={theme.primary} />
+            </Pressable>
+          )}
+        </View>
       </View>
 
       {/* Chapter Dropdown */}
