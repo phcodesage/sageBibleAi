@@ -5,17 +5,21 @@ import { Screen } from '../components/Screen';
 import { useBible } from '../context/BibleContext';
 import { useRouter } from 'expo-router';
 import Colors from '../constants/Colors';
+import { useColorScheme } from 'react-native';
+import { SearchResult } from '../types/bible';
 
 export default function SearchScreen() {
   const router = useRouter();
-  const { searchVerses } = useBible();
+  const { search } = useBible();
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<any[]>([]);
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const colorScheme = useColorScheme();
+  const theme = Colors[colorScheme ?? 'light'];
 
-  const handleSearch = (text: string) => {
+  const handleSearch = async (text: string) => {
     setQuery(text);
     if (text.length >= 2) {
-      const searchResults = searchVerses(text);
+      const searchResults = await search(text);
       setResults(searchResults);
     } else {
       setResults([]);
@@ -44,7 +48,7 @@ export default function SearchScreen() {
               });
             }}
           >
-            <Text style={styles.reference}>
+            <Text style={[styles.reference, { color: theme.primary }]}>
               {item.book} {item.chapter}:{item.verse}
             </Text>
             <Text style={styles.verseText}>{item.text}</Text>
@@ -75,7 +79,7 @@ const styles = StyleSheet.create({
   reference: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: Colors.primary,
+    color: Colors.light.primary,
     marginBottom: 4,
   },
   verseText: {

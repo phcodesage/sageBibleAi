@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 import { bibleService } from '../services/bibleService';
 import { View, ActivityIndicator, Text, Pressable, StyleSheet, useColorScheme } from 'react-native';
 import Colors from '../constants/Colors';
+import { SearchResult } from '../types/bible';
 
 interface BibleContextType {
   currentBook: string;
@@ -9,6 +10,7 @@ interface BibleContextType {
   setCurrentBook: (book: string) => void;
   setCurrentChapter: (chapter: number) => void;
   fetchVerseContent: (reference: string) => Promise<any>;
+  search: (query: string) => Promise<SearchResult[]>;
 }
 
 const BibleContext = createContext<BibleContextType | undefined>(undefined);
@@ -41,6 +43,15 @@ export function BibleProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Error fetching verse content:', error);
       return null;
+    }
+  }, []);
+
+  const search = useCallback(async (query: string) => {
+    try {
+      return await bibleService.searchText(query);
+    } catch (error) {
+      console.error('Error searching:', error);
+      return [];
     }
   }, []);
 
@@ -92,6 +103,7 @@ export function BibleProvider({ children }: { children: React.ReactNode }) {
         setCurrentBook,
         setCurrentChapter,
         fetchVerseContent,
+        search,
       }}
     >
       {children}
