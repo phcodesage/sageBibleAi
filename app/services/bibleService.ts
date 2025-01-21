@@ -20,6 +20,7 @@ class BibleService {
   private initialized: boolean;
   private bibleData: any;
   private initializationError: Error | null;
+  private searchIndex: Map<string, Set<string>> = new Map();
 
   private readonly wordRelations: { [key: string]: string[] } = {
     'pig': ['swine', 'hog', 'sow'],
@@ -73,6 +74,9 @@ class BibleService {
         lastBook: this.bibleData[this.bibleData.length - 1]?.abbrev
       });
 
+      // Build search index during initialization
+      await this.buildSearchIndex();
+
       this.initialized = true;
       this.initializationError = null;
     } catch (error) {
@@ -80,6 +84,30 @@ class BibleService {
       this.initializationError = error as Error;
       throw error;
     }
+  }
+
+  private async buildSearchIndex() {
+    console.log('Building search index...');
+    
+    this.bibleData.forEach((book: any) => {
+      book.chapters.forEach((chapter: any, chapterIndex: number) => {
+        chapter.forEach((verse: any, verseIndex: number) => {
+          // Create tokens from the verse
+          const tokens = verse.toLowerCase().split(/\s+/);
+          
+          // Add each word to the search index
+          tokens.forEach(token => {
+            if (token.length > 2) { // Skip very short words
+              const references = this.searchIndex.get(token) || new Set();
+              references.add(`${book.abbrev}|${chapterIndex + 1}|${verseIndex + 1}|${verse}`);
+              this.searchIndex.set(token, references);
+            }
+          });
+        });
+      });
+    });
+    
+    console.log('Search index built');
   }
 
   // Add method to check initialization status
@@ -157,48 +185,41 @@ class BibleService {
   }
 
   async searchText(query: string): Promise<SearchResult[]> {
-    await this.initialize();
     const results: SearchResult[] = [];
-    const lowercaseQuery = query.toLowerCase();
+    const searchWords = query.toLowerCase().split(/\s+/).filter(word => word.length > 2);
+    
+    if (searchWords.length === 0) return results;
 
-    try {
-      console.log('Starting search for:', query);
+    // Get matching references for the first word
+    const firstWordMatches = this.searchIndex.get(searchWords[0]) || new Set();
+    
+    // Convert to array for processing
+    const potentialMatches = Array.from(firstWordMatches);
+    
+    for (const reference of potentialMatches) {
+      const [book, chapter, verse, text] = reference.split('|');
       
-      this.bibleData.forEach((book: any) => {
-        console.log(`Searching in book: ${book.name}`);
-        book.chapters.forEach((chapter: any, chapterIndex: number ) => {
-          chapter.forEach((verse: any, verseIndex: number   ) => {
-            const lowercaseVerse = verse.toLowerCase();
-            const matchIndex = lowercaseVerse.indexOf(lowercaseQuery);
-            
-            if (matchIndex !== -1) {
-              console.log(`Match found in ${book.name} ${chapterIndex + 1}:${verseIndex + 1}`);
-              results.push({
-                book: book.abbrev,
-                chapter: chapterIndex + 1,
-                verse: verseIndex + 1,
-                text: verse,
-                matchIndex,
-                keyword: query
-              });
-            }
-          });
+      // Check if all search words are present in the verse
+      const matchesAllWords = searchWords.every(word => 
+        text.toLowerCase().includes(word)
+      );
+      
+      if (matchesAllWords) {
+        results.push({
+          book,
+          chapter: parseInt(chapter),
+          verse: parseInt(verse),
+          text,
+          matchIndex: text.toLowerCase().indexOf(searchWords[0]),
+          keyword: query
         });
-      });
-
-      console.log(`Search complete. Found ${results.length} matches`);
-      if (results.length > 0) {
-        console.log('First 3 matches:', results.slice(0, 3).map(r => ({
-          reference: `${r.book} ${r.chapter}:${r.verse}`,
-          text: r.text
-        })));
       }
-
-      return results;
-    } catch (error) {
-      console.error('Error searching text:', error);
-      throw error;
+      
+      // Limit results for better performance
+      if (results.length >= 100) break;
     }
+
+    return results;
   }
 
   async findRelatedWords(keyword: string): Promise<string[]> {
